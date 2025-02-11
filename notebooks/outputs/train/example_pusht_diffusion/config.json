@@ -1,0 +1,74 @@
+{
+    "type": "diffusion",
+    "n_obs_steps": 2,
+    "normalization_mapping": {
+        "VISUAL": "MEAN_STD",
+        "STATE": "MIN_MAX",
+        "ACTION": "MIN_MAX"
+    },
+    "input_features": {
+        "observation.image": {
+            "type": "VISUAL",
+            "shape": [
+                3,
+                96,
+                96
+            ]
+        },
+        "observation.state": {
+            "type": "STATE",
+            "shape": [
+                2
+            ]
+        }
+    },
+    "output_features": {
+        "action": {
+            "type": "ACTION",
+            "shape": [
+                2
+            ]
+        }
+    },
+    "horizon": 16,
+    "n_action_steps": 8,
+    "drop_n_last_frames": 7,
+    "vision_backbone": "resnet18",
+    "crop_shape": [
+        84,
+        84
+    ],
+    "crop_is_random": true,
+    "pretrained_backbone_weights": null,
+    "use_group_norm": true,
+    "spatial_softmax_num_keypoints": 32,
+    "use_separate_rgb_encoder_per_camera": false,
+    "down_dims": [
+        512,
+        1024,
+        2048
+    ],
+    "kernel_size": 5,
+    "n_groups": 8,
+    "diffusion_step_embed_dim": 128,
+    "use_film_scale_modulation": true,
+    "noise_scheduler_type": "DDPM",
+    "num_train_timesteps": 100,
+    "beta_schedule": "squaredcos_cap_v2",
+    "beta_start": 0.0001,
+    "beta_end": 0.02,
+    "prediction_type": "epsilon",
+    "clip_sample": true,
+    "clip_sample_range": 1.0,
+    "num_inference_steps": null,
+    "do_mask_loss_for_padding": false,
+    "optimizer_lr": 0.0001,
+    "optimizer_betas": [
+        0.95,
+        0.999
+    ],
+    "optimizer_eps": 1e-08,
+    "optimizer_weight_decay": 1e-06,
+    "scheduler_name": "cosine",
+    "scheduler_warmup_steps": 500
+}
