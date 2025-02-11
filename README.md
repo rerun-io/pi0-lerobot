@@ -37,3 +37,8 @@ pixi install
 ```bash
 pixi run notebook_tutorial
 ```
+
+## TODO
+- [x] Notebook Tutorials
+- [ ] Finetune and evaluation on Aloha simulator with Pi0
+- [ ] Finetune base Pi0 on [SO-ARM100](https://github.com/TheRobotStudio/SO-ARM100) from lerobot
