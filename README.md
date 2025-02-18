@@ -33,12 +33,31 @@ pixi install
 ```
 
 ## Usage
+### Human Pose and Kinematics
+```bash
+pixi install
+pixi shell
+python tools/visualize_assembly.py --root-directory $ROOT-DIR-FOR-ASSEMBLY-DATA --example-name $STR-NAME-OF-EXAMPLE-FOLDER
+```
 ### Jupyter Notebook Tutorials
 ```bash
 pixi run notebook_tutorial
 ```
 
 ## TODO
+### Part 1. Human Pose and Kinematics
+- [x] Basic Triangulation from 2D Detection (body pose)
+- [x] Basic Triangulation from 2D detection (hand pose)
+- [ ] Detection by Tracking (extrapolate 3d views-> Generate bounding box based on extrapolated -> check based on kpts confidence)
+- [ ] Mano + SMPL fitting for skeleton kinematics
+- [ ] Add EgoCentric (first person) headset views and poses
+
+### Part 2. Body and Hand Pose Retargeting
+- [x] Basic Triangulation 2D Detection
+- [ ] Finetune and evaluation on Aloha simulator with Pi0
+- [ ] Finetune base Pi0 on [SO-ARM100](https://github.com/TheRobotStudio/SO-ARM100) from lerobot
+
+### Part 3. Immitation Learning and Teleoperation
 - [x] Notebook Tutorials
 - [ ] Finetune and evaluation on Aloha simulator with Pi0
 - [ ] Finetune base Pi0 on [SO-ARM100](https://github.com/TheRobotStudio/SO-ARM100) from lerobot
