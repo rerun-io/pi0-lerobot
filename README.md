@@ -53,9 +53,7 @@ pixi run notebook_tutorial
 - [ ] Add EgoCentric (first person) headset views and poses
 
 ### Part 2. Body and Hand Pose Retargeting
-- [x] Basic Triangulation 2D Detection
-- [ ] Finetune and evaluation on Aloha simulator with Pi0
-- [ ] Finetune base Pi0 on [SO-ARM100](https://github.com/TheRobotStudio/SO-ARM100) from lerobot
+- [ ] Implement pose retargeting to isaac sim
 
 ### Part 3. Immitation Learning and Teleoperation
 - [x] Notebook Tutorials
