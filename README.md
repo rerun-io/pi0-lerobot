@@ -27,7 +27,7 @@ Currently only linux is supported
 ### Using Pixi
 Make sure you have the [Pixi](https://pixi.sh/latest/#installation) package manager installed
 ```bash
-git clone https://github.com/pablovela5620/pi0-lerobot.git
+git clone https://github.com/rerun-io/pi0-lerobot.git
 cd pi0-lerobot
 pixi install
 ```
