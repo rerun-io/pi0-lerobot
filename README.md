@@ -34,6 +34,7 @@ pixi install
 
 ## Usage
 ### Human Pose and Kinematics
+For assembly101 dataset go to this [link](https://github.com/assembly-101/assembly101-download-scripts) to get/download dataset
 ```bash
 pixi install
 pixi shell
