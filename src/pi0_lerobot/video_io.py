@@ -1,6 +1,7 @@
 # Copyright (c) OpenMMLab. All rights reserved.
 import os.path as osp
 from collections import OrderedDict
+from collections.abc import Generator
 from pathlib import Path
 
 import cv2
@@ -15,6 +16,8 @@ from cv2 import (
     VideoWriter_fourcc,
 )
 from mmengine.utils import check_file_exist, mkdir_or_exist, scandir, track_progress
+
+from pi0_lerobot.custom_types import BgrImageType
 
 
 class Cache:
@@ -274,6 +277,53 @@ class VideoReader:
 
     def __exit__(self, exc_type, exc_value, traceback):
         self._vcap.release()
+
+
+class MultiVideoReader:
+    def __init__(self, video_paths: list[Path]) -> None:
+        # check that all video_paths are valid
+        for video_path in video_paths:
+            assert video_path.exists(), f"{video_path} does not exist"
+
+        self.video_paths: list[Path] = video_paths
+        self.video_readers: list[VideoReader] = [
+            VideoReader(str(video_path)) for video_path in video_paths
+        ]
+
+        assert all(
+            reader.height == self.video_readers[0].height
+            and reader.width == self.video_readers[0].width
+            for reader in self.video_readers
+        )
+
+    @property
+    def height(self) -> int:
+        return self.video_readers[0].height
+
+    @property
+    def width(self) -> int:
+        return self.video_readers[0].width
+
+    def __len__(self) -> int:
+        # Use minimum length to ensure safe iteration
+        return min(len(reader) for reader in self.video_readers)
+
+    def __iter__(self) -> Generator[list[BgrImageType] | None, None, None]:
+        while True:
+            bgr_list: list[BgrImageType] = []
+            for reader in self.video_readers:
+                bgr_image: BgrImageType | None = reader.read()
+                match bgr_image:
+                    case _ if bgr_image is not None:
+                        bgr_list.append(bgr_image)
+                    case None:
+                        return
+            yield bgr_list
+
+    def __getitem__(self, idx: int) -> list[BgrImageType]:
+        if idx < 0 or idx >= len(self):
+            raise IndexError("Index out of range")
+        return [reader[idx] for reader in self.video_readers]
 
 
 def frames2video(

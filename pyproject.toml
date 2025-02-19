@@ -49,6 +49,7 @@ jupyterlab = ">=4.3.5,<5"
 mmengine = ">=0.10.5,<0.11"
 py-opencv = ">=4.11.0,<5"
 cudnn = ">=9.7.1.26,<10"
+orjson = ">=3.10.15,<4"
 
 [tool.ruff]
 line-length = 120
