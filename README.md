@@ -1,5 +1,5 @@
 # Pi0 and Lerobot with Rerun
-A repo to explore training robots with Pi0 and Lerobot
+A repo to explore training robots with Pi0 and Lerobot and human pose motion retargeting
 
 <p align="center">
   <a title="Website" href="https://rerun.io/" target="_blank" rel="noopener noreferrer" style="display: inline-block;">
@@ -19,7 +19,7 @@ A repo to explore training robots with Pi0 and Lerobot
   </p>
 
 <p align="center">
-  <img src="media/final_video.gif" alt="example output" width="720" />
+  <img src="media/lerobot_notebooks.gif" alt="example output" width="720" />
 </p>
 
 ## Installation
@@ -29,16 +29,25 @@ Make sure you have the [Pixi](https://pixi.sh/latest/#installation) package mana
 ```bash
 git clone https://github.com/rerun-io/pi0-lerobot.git
 cd pi0-lerobot
-pixi install
 ```
 
 ## Usage
 ### Human Pose and Kinematics
-For assembly101 dataset go to this [link](https://github.com/assembly-101/assembly101-download-scripts) to get/download dataset
+
+<p align="center">
+  <img src="media/assembly101.gif" alt="example output" width="640" />
+</p>
+
+For the full assembly101 dataset go to this [link](https://github.com/assembly-101/assembly101-download-scripts) to get/download dataset
+
+To run dataset visualization
 ```bash
-pixi install
-pixi shell
-python tools/visualize_assembly.py --root-directory $ROOT-DIR-FOR-ASSEMBLY-DATA --example-name $STR-NAME-OF-EXAMPLE-FOLDER
+pixi run visualize-assembly101-dataset
+```
+
+To run 2D pose estimation, tracking, and triangulation
+```bash
+pixi run pose-estimation-assembly101
 ```
 ### Jupyter Notebook Tutorials
 ```bash
@@ -49,7 +58,7 @@ pixi run notebook_tutorial
 ### Part 1. Human Pose and Kinematics
 - [x] Basic Triangulation from 2D Detection (body pose)
 - [x] Basic Triangulation from 2D detection (hand pose)
-- [ ] Detection by Tracking (extrapolate 3d views-> Generate bounding box based on extrapolated -> check based on kpts confidence)
+- [x] Detection by Tracking (extrapolate 3d views-> Generate bounding box based on extrapolated -> check based on kpts confidence)
 - [ ] Mano + SMPL fitting for skeleton kinematics
 - [ ] Add EgoCentric (first person) headset views and poses
 

@@ -40,7 +40,7 @@ class ExoExtriCameras:
 
 
 @serde
-class EgoCameras:
+class EgoExtriCameras:
     # Use the "rename" parameter to indicate that the JSON key "0" should map to serde_field "left"
     C21176875: Float32[ndarray, "4 4"] = serde_field(rename="21176875:mono10bit")
     C21179183: Float32[ndarray, "4 4"] = serde_field(rename="21179183:mono10bit")
@@ -58,6 +58,57 @@ def load_exo_cameras(
         extrinsics_fixed = json.load(f)
 
     exo_raw_extri: ExoExtriCameras = from_dict(ExoExtriCameras, extrinsics_fixed)
+    # assembly101 does not have camera intrinsics, so need to get them from assemblyhands
+    with open(train_assembly_hands_json) as f:
+        train_assembly_hands_dict: dict = json.load(f)
+
+    all_calib_dict: dict = train_assembly_hands_dict["calibration"]
+    # assume that all cameras have the same intrinsics for each capture, so only get a single one
+    instrinsics_dict: dict[str, list[list[float]]] = next(
+        iter(all_calib_dict.values())
+    )["intrinsics"]
+
+    pinhole_list: list[PinholeParameters] = []
+
+    cam_name: str
+    exo_camera: Float32[ndarray, "4 4"]
+    for cam_name, exo_camera in asdict(exo_raw_extri).items():
+        intri: Float32[ndarray, "3 3"] = np.array(
+            instrinsics_dict[f"{cam_name}_rgb"], dtype=np.float32
+        )
+        intri = Intrinsics(
+            camera_conventions="RDF",
+            fl_x=float(intri[0, 0]),
+            fl_y=float(intri[1, 1]),
+            cx=float(intri[0, 2]),
+            cy=float(intri[1, 2]),
+            height=height,
+            width=width,
+        )
+        extri = Extrinsics(
+            world_R_cam=exo_camera[:3, :3],
+            world_t_cam=exo_camera[:3, 3],
+        )
+        pinhole_param = PinholeParameters(
+            name=cam_name,
+            intrinsics=intri,
+            extrinsics=extri,
+        )
+        pinhole_list.append(pinhole_param)
+
+    return pinhole_list
+
+
+def load_ego_cameras(
+    extrinsics_ego_path: Path,
+    train_assembly_hands_json: Path,
+    height: int,
+    width: int,
+) -> list[PinholeParameters]:
+    with open(extrinsics_ego_path) as f:
+        extrinsics_ego = json.load(f)
+
+    exo_raw_extri: EgoExtriCameras = from_dict(EgoExtriCameras, extrinsics_ego)
     # assembly101 does not have camera intrinsics, so need to get them from assemblyhands
     with open(train_assembly_hands_json) as f:
         train_assembly_hands_dict: dict = json.load(f)

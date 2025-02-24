@@ -6302,7 +6302,7 @@ packages:
 - pypi: .
   name: pi0-lerobot
   version: 0.1.0
-  sha256: 0fe2fb814a463d7e7027e0ad751f9e02e82092cf6e4b3c520f4cfbbc2a889193
+  sha256: ffbffb34c21e2b80491bcb6110c77490993788a0bb937e0b82b15dfbe1a2a9c2
   requires_dist:
   - tensordict>=0.7.0,<0.8
   - wadler-lindig>=0.1.3,<0.2

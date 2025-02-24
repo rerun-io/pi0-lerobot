@@ -74,7 +74,7 @@ python tools/visualize_assembly.py
 depends-on = ["_download-assembly101-sample"]
 description = "Shows visualization of annotations in assembly101 dataset"
 
-[tool.pixi.tasks.assembly101-pose-estimation]
+[tool.pixi.tasks.pose-estimation-assembly101]
 cmd = """
 python tools/person_detection_assembly.py
 """
