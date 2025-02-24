@@ -6,6 +6,7 @@ from typing import Literal
 import numpy as np
 import rerun as rr
 import rerun.blueprint as rrb
+from einops import rearrange
 from jaxtyping import Float32, Float64, Int, UInt8
 from numpy import ndarray
 from simplecv.camera_parameters import (
@@ -152,7 +153,7 @@ def run_person_detection(config: VisualzeConfig):
 
     # load data
     assembly101_data: Assembly101Dataset = load_assembly101(
-        config.root_directory, config.example_name, load_2d=False, load_3d=False
+        config.root_directory, config.example_name, load_2d=False, load_3d=True
     )
     exo_video_readers: MultiVideoReader = assembly101_data.exo_video_readers
     exo_gpu_decoders: list[VideoDecoder] = [
@@ -197,6 +198,41 @@ def run_person_detection(config: VisualzeConfig):
     longest_timestamp: Int[ndarray, "num_frames"] = max(all_timestamps, key=len)  # noqa: UP037
 
     print(f"Time taken to load data: {timer() - start_time:.2f} seconds")
+
+    num_send: int = len(longest_timestamp)
+
+    left_kpts_stack, right_kpts_stack = assembly101_data.kpts_3d_to_column()
+    left_kpts_stack: Float32[ndarray, "num_frames 21 3"] = left_kpts_stack[:num_send]
+    right_kpts_stack: Float32[ndarray, "num_frames 21 3"] = right_kpts_stack[:num_send]
+
+    for side, color, class_id, kpts_stack in (
+        ("left", (255, 0, 0), 0, left_kpts_stack),
+        ("right", (0, 255, 0), 1, right_kpts_stack),
+    ):
+        num_send = min(num_send, kpts_stack.shape[0])
+        rr.log(
+            side,
+            rr.Points3D.from_fields(
+                colors=color,
+                class_ids=class_id,
+                keypoint_ids=HAND_IDS,
+                show_labels=False,
+            ),
+            static=True,
+        )
+
+        rr.send_columns(
+            side,
+            indexes=[rr.TimeNanosColumn(timeline, longest_timestamp[0:num_send])],
+            columns=[
+                *rr.Points3D.columns(
+                    positions=rearrange(
+                        kpts_stack,
+                        "num_frames kpts dim -> (num_frames kpts) dim",
+                    ),
+                ).partition(lengths=[21] * num_send),
+            ],
+        )
 
     cams_for_detection_idx: list[int] = [0, 2, 3, 5]
 
