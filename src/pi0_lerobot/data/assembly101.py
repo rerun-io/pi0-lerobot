@@ -4,14 +4,13 @@ from pathlib import Path
 from typing import Literal
 
 import numpy as np
-from icecream import ic
+from einops import rearrange
 from jaxtyping import Float32
 from numpy import ndarray
 from serde import field as serde_field
 from serde import from_dict, serde
 from simplecv.camera_parameters import Extrinsics, Intrinsics, PinholeParameters
 from tqdm import tqdm
-from einops import rearrange
 
 from pi0_lerobot.video_io import MultiVideoReader
 
@@ -144,42 +143,50 @@ class Assembly101Dataset:
     kpts_3d_json: Path
     all_2d_kpts_exo: dict[int, Exo2DKeypoints] = field(default_factory=dict)
     all_3d_kpts: dict[int, Hand3DKeypoints] = field(default_factory=dict)
+    load_2d: bool = True
+    load_3d: bool = True
 
     def __post_init__(self):
-        with open(self.kpts_2d_json) as f:
-            all_2d_kpts: dict[str, dict[str, dict[str, list[list[float]]]]] = (
-                json.loads(f.read())
+        if self.load_2d:
+            with open(self.kpts_2d_json) as f:
+                all_2d_kpts: dict[str, dict[str, dict[str, list[list[float]]]]] = (
+                    json.loads(f.read())
+                )
+
+            # sort all_2d_landmarks by frame number
+            all_2d_kpts = dict(
+                sorted(all_2d_kpts.items(), key=lambda item: int(item[0]))
             )
 
-        # sort all_2d_landmarks by frame number
-        all_2d_kpts = dict(sorted(all_2d_kpts.items(), key=lambda item: int(item[0])))
+            for frame_num, kpts_2d_dict in all_2d_kpts.items():
+                exo_kpts_2d_dict = {
+                    k: v for k, v in kpts_2d_dict.items() if k.startswith("C")
+                }
+                self.all_2d_kpts_exo[int(frame_num)] = from_dict(
+                    Exo2DKeypoints, exo_kpts_2d_dict
+                )
 
-        for frame_num, kpts_2d_dict in all_2d_kpts.items():
-            exo_kpts_2d_dict = {
-                k: v for k, v in kpts_2d_dict.items() if k.startswith("C")
+        if self.load_3d:
+            # Load 3D keypoints
+            with open(self.kpts_3d_json) as f:
+                all_3d_landmarks: dict[str, dict[str, list[list[float]]]] = json.loads(
+                    f.read()
+                )
+            # convert to Hand3DKeypoints for easier access
+            all_3d_landmarks = dict(
+                sorted(all_3d_landmarks.items(), key=lambda item: int(item[0]))
+            )
+            self.all_3d_kpts: dict[int, Hand3DKeypoints] = {
+                int(k): from_dict(Hand3DKeypoints, v)
+                for k, v in all_3d_landmarks.items()
             }
-            self.all_2d_kpts_exo[int(frame_num)] = from_dict(
-                Exo2DKeypoints, exo_kpts_2d_dict
-            )
-
-        # Load 3D keypoints
-        with open(self.kpts_3d_json) as f:
-            all_3d_landmarks: dict[str, dict[str, list[list[float]]]] = json.loads(
-                f.read()
-            )
-        # convert to Hand3DKeypoints for easier access
-        all_3d_landmarks = dict(
-            sorted(all_3d_landmarks.items(), key=lambda item: int(item[0]))
-        )
-        self.all_3d_kpts: dict[int, Hand3DKeypoints] = {
-            int(k): from_dict(Hand3DKeypoints, v) for k, v in all_3d_landmarks.items()
-        }
 
     def kpts_3d_to_column(
         self,
     ) -> tuple[
         Float32[ndarray, "num_frames 21 3"], Float32[ndarray, "num_frames 21 3"]
     ]:
+        assert self.load_3d, "3D keypoints not loaded."
         left_kpts_list = []
         right_kpts_list = []
         for frame_number, _ in enumerate(tqdm(self.all_3d_kpts)):
@@ -202,6 +209,7 @@ class Assembly101Dataset:
     ) -> tuple[
         dict[str, Float32[ndarray, "_ 21 2"]], dict[str, Float32[ndarray, "_ 21 2"]]
     ]:
+        assert self.load_2d, "2D keypoints not loaded."
         camera_names = (
             Exo2DKeypoints.__annotations__.keys()
         )  # e.g., "C10395", "C10379", etc.
@@ -230,14 +238,13 @@ class Assembly101Dataset:
 
 
 def load_assembly101(
-    root_directory: Path, example_name: str, encoding: Literal["av1", "h264"] = "av1"
+    root_directory: Path,
+    example_name: str,
+    encoding: Literal["av1", "h264"] = "av1",
+    load_2d: bool = True,
+    load_3d: bool = True,
 ) -> Assembly101Dataset:
-    match encoding:
-        case "av1":
-            video_dir: Path = root_directory / "av1" / example_name
-        case "h264":
-            video_dir: Path = root_directory / "videos" / example_name
-
+    video_dir: Path = root_directory / "videos" / encoding / example_name
     landmarks_3d_path: Path = (
         root_directory
         / "assembly101_camera_and_hand_poses"
@@ -302,6 +309,8 @@ def load_assembly101(
         exo_pinhole_list=exo_pinhole_list,
         kpts_2d_json=landmarks_2d_path,
         kpts_3d_json=landmarks_3d_path,
+        load_2d=load_2d,
+        load_3d=load_3d,
     )
 
     return assembly101_dataset

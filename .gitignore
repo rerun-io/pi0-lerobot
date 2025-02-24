@@ -179,3 +179,4 @@ cython_debug/
 
 # data
 data/*
+notebooks/scratchbook/*

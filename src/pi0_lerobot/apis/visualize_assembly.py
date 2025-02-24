@@ -1,6 +1,7 @@
 from dataclasses import dataclass
 from pathlib import Path
 from timeit import default_timer as timer
+from typing import Literal
 
 import numpy as np
 import rerun as rr
@@ -20,6 +21,7 @@ from pi0_lerobot.data.assembly101 import (
     Hand3DKeypoints,
     load_assembly101,
 )
+from pi0_lerobot.rerun_log_utils import create_blueprint
 from pi0_lerobot.skeletons.assembly_hand import HAND_ID2NAME, HAND_IDS, HAND_LINKS
 from pi0_lerobot.video_io import MultiVideoReader
 
@@ -29,11 +31,14 @@ np.set_printoptions(suppress=True)
 @dataclass
 class VisualzeConfig:
     rr_config: RerunTyroConfig
-    root_directory: Path = Path("/mnt/12tbdrive/data/assembly101-new")
+    root_directory: Path = Path("data/assembly101-sample")
     example_name: str = (
-        "nusar-2021_action_both_9051-b03a_9051_user_id_2021-02-22_114140"
+        # "nusar-2021_action_both_9051-b03a_9051_user_id_2021-02-22_114140"
+        "nusar-2021_action_both_9015-b05b_9015_user_id_2021-02-02_161800"
     )
+    encode_format: Literal["av1", "h264"] = "av1"
     use_columns: bool = True
+    num_videos_to_log: Literal[4, 8] = 4
 
 
 def set_pose_annotation_context() -> None:
@@ -61,55 +66,6 @@ def set_pose_annotation_context() -> None:
         ),
         static=True,
     )
-
-
-def create_blueprint(exo_video_log_paths: list[Path]) -> rrb.Blueprint:
-    active_tab: int = 0  # 0 for video, 1 for images
-    blueprint = rrb.Blueprint(
-        rrb.Horizontal(
-            contents=[
-                rrb.Vertical(
-                    contents=[
-                        rrb.Spatial3DView(
-                            origin="/",
-                        ),
-                        # take the first 4 video files
-                        rrb.Horizontal(
-                            contents=[
-                                rrb.Tabs(
-                                    rrb.Spatial2DView(origin=f"{video_log_path}"),
-                                    rrb.Spatial2DView(
-                                        origin=f"{video_log_path}".replace(
-                                            "video", "image"
-                                        )
-                                    ),
-                                    active_tab=active_tab,
-                                )
-                                for video_log_path in exo_video_log_paths[:4]
-                            ]
-                        ),
-                    ],
-                    row_shares=[3, 1],
-                ),
-                # do the last 4 videos
-                rrb.Vertical(
-                    contents=[
-                        rrb.Tabs(
-                            rrb.Spatial2DView(origin=f"{video_log_path}"),
-                            rrb.Spatial2DView(
-                                origin=f"{video_log_path}".replace("video", "image")
-                            ),
-                            active_tab=active_tab,
-                        )
-                        for video_log_path in exo_video_log_paths[4:]
-                    ]
-                ),
-            ],
-            column_shares=[4, 1],
-        ),
-        collapse_panels=True,
-    )
-    return blueprint
 
 
 def log_video(
@@ -151,7 +107,7 @@ def visualize_data(config: VisualzeConfig):
 
     # load data
     assembly101_data: Assembly101Dataset = load_assembly101(
-        config.root_directory, config.example_name
+        config.root_directory, config.example_name, encoding=config.encode_format
     )
     exo_video_readers: MultiVideoReader = assembly101_data.exo_video_readers
     exo_pinhole_list: list[PinholeParameters] = assembly101_data.exo_pinhole_list
@@ -172,7 +128,10 @@ def visualize_data(config: VisualzeConfig):
         for video_file in exo_video_files
     ]
 
-    blueprint: rrb.Blueprint = create_blueprint(exo_video_log_paths=exo_video_log_paths)
+    blueprint: rrb.Blueprint = create_blueprint(
+        exo_video_log_paths=exo_video_log_paths,
+        num_videos_to_log=config.num_videos_to_log,
+    )
     rr.send_blueprint(blueprint=blueprint)
 
     for video_file, video_log_path in zip(
@@ -200,10 +159,11 @@ def visualize_data(config: VisualzeConfig):
             :num_send
         ]
 
-        for side, color, class_id in (
-            ("left", (255, 0, 0), 0),
-            ("right", (0, 255, 0), 1),
+        for side, color, class_id, kpts_stack in (
+            ("left", (255, 0, 0), 0, left_kpts_stack),
+            ("right", (0, 255, 0), 1, right_kpts_stack),
         ):
+            num_send = min(num_send, kpts_stack.shape[0])
             rr.log(
                 side,
                 rr.Points3D.from_fields(
@@ -221,12 +181,7 @@ def visualize_data(config: VisualzeConfig):
                 columns=[
                     *rr.Points3D.columns(
                         positions=rearrange(
-                            left_kpts_stack,
-                            "num_frames kpts dim -> (num_frames kpts) dim",
-                        )
-                        if side == "left"
-                        else rearrange(
-                            right_kpts_stack,
+                            kpts_stack,
                             "num_frames kpts dim -> (num_frames kpts) dim",
                         ),
                     ).partition(lengths=[21] * num_send),
