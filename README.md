@@ -45,6 +45,12 @@ To run dataset visualization
 pixi run visualize-assembly101-dataset
 ```
 
+Current Pipeline
+<p align="center">
+  <img src="media/multiview_keypoint_tracker.png" alt="pipeline" />
+</p>
+
+
 To run 2D pose estimation, tracking, and triangulation
 ```bash
 pixi run pose-estimation-assembly101
