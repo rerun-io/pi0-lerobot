@@ -38,6 +38,7 @@ cd pi0-lerobot
   <img src="media/assembly101.gif" alt="example output" width="640" />
 </p>
 
+For HOCap dataset, sample is automatically downloaded from dataset on command run
 For the full assembly101 dataset go to this [link](https://github.com/assembly-101/assembly101-download-scripts) to get/download dataset
 
 To run dataset visualization
