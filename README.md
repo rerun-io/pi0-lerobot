@@ -42,6 +42,7 @@ For the full assembly101 dataset go to this [link](https://github.com/assembly-1
 
 To run dataset visualization
 ```bash
+pixi run visualize-hocap-dataset # recommended
 pixi run visualize-assembly101-dataset
 ```
 
