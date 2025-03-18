@@ -42,8 +42,15 @@ For the full assembly101 dataset go to this [link](https://github.com/assembly-1
 
 To run dataset visualization
 ```bash
+pixi run visualize-hocap-dataset # recommended
 pixi run visualize-assembly101-dataset
 ```
+
+Current Pipeline
+<p align="center">
+  <img src="media/multiview_keypoint_tracker.png" alt="pipeline" />
+</p>
+
 
 To run 2D pose estimation, tracking, and triangulation
 ```bash

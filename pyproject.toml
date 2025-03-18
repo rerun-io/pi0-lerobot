@@ -25,8 +25,6 @@ cuda = "12.4"
 [tool.pixi.activation]
 scripts = [".pixi.sh"]
 
-# [tool.pixi.pypi-options]
-# index-strategy = "unsafe-best-match"
 
 [tool.pixi.pypi-dependencies]
 pi0_lerobot = { path = ".", editable = true }
@@ -35,44 +33,63 @@ openpi-client = { git = "https://github.com/Physical-Intelligence/openpi.git", s
 lerobot = { git = "https://github.com/huggingface/lerobot", rev = "8548a87bd49c19bcda64cf0d6f205a378c1cebc3", extras = [
     "pusht",
 ] }
-simplecv = { git = "https://github.com/pablovela5620/simplecv.git" }
+simplecv = { git = "https://github.com/pablovela5620/simplecv.git", rev = "950bd1f0a9c9389d8d44f6361ff182c16f5b5b12" }
 rtmlib = { git = "https://github.com/pablovela5620/rtmlib.git" }
 torch = { version = ">=2.5.1", index = "https://download.pytorch.org/whl/cu124" }
 torchvision = { version = ">=0.20.1", index = "https://download.pytorch.org/whl/cu124" }
 torchcodec = { version = ">=0.2.0", index = "https://download.pytorch.org/whl/cu124" }
-mdit-py-plugins = "*"
-# gradio-rerun = { url = "https://huggingface.co/datasets/pablovela5620/gradio4-rerun0.22/resolve/main/dist/gradio_rerun-0.0.11-py3-none-any.whl" }
-# rerun-sdk = { url = "https://files.pythonhosted.org/packages/1e/db/3ce2be017d7d4ac0948fb064bf7417b36c96bc07d1b8a922017606ba03c6/rerun_sdk-0.22.1-cp38-abi3-manylinux_2_31_x86_64.whl" }
+manopth = { git = "https://github.com/gobanana520/manopth.git" }
+
+# gradio-rerun = { url = "https://huggingface.co/datasets/pablovela5620/gradio-rr-wheels/resolve/main/gradio_rerun-0.0.11-py3-none-any.whl" }
 
 [tool.pixi.tasks]
-# install = { cmd = "pwd", description = "Installs package", depends-on = [
-#     "_install-gradio-rerun",
-# ] }
 notebook_tutorial = { cmd = "jupyter lab notebooks", description = "Starts jupyter lab with notebooks for lerobot tutorials" }
-
-[tool.pixi.tasks._install-gradio-rerun]
-cmd = """
-python -m pip install https://huggingface.co/datasets/pablovela5620/gradio4-rerun0.22/resolve/main/dist/gradio_rerun-0.0.11-py3-none-any.whl
-"""
-description = "Downloads an example aseembly101 dataset from huggingface"
-
+_install-chumpy = { cmd = "pip install git+https://github.com/gobanana520/chumpy.git", description = "Installs chumpy" }
 
 [tool.pixi.tasks._download-assembly101-sample]
 cmd = """
-huggingface-cli download pablovela5620/Assembly101-Sample \
-  --repo-type dataset \
-  --include "assembly101-sample/**" \
-  --local-dir data/
+test -e data/assembly101-sample \
+  || (huggingface-cli download pablovela5620/Assembly101-Sample \
+    --repo-type dataset \
+    --include "assembly101-sample/**" \
+    --local-dir data/)
 """
 outputs = ["data/assembly101-sample"]
-description = "Downloads an example aseembly101 dataset from huggingface"
+description = "Downloads an example assembly101 dataset from huggingface"
 
 [tool.pixi.tasks.visualize-assembly101-dataset]
 cmd = """
-python tools/visualize_assembly.py
-"""
-depends-on = ["_download-assembly101-sample"]
+    python tools/view_exo_ego.py \
+        --root-directory data/assembly101-sample/ \
+        --sequence-name nusar-2021_action_both_9012-c07c_9012_user_id_2021-02-01_164345 \
+        --dataset assembly101
+    """
 description = "Shows visualization of annotations in assembly101 dataset"
+depends-on = ["_download-assembly101-sample"]
+
+[tool.pixi.tasks._download-hocap-sample]
+cmd = """
+    test -e data/hocap/sample.zip \
+    && test -e data/hocap/sample \
+    || (
+        mkdir -p data/hocap/ \
+        && huggingface-cli download pablovela5620/hocap-sample \
+        sample.zip --repo-type dataset \
+        --local-dir data/hocap/ \
+        && unzip -o data/hocap/sample.zip -d data/hocap/
+    )
+    """
+outputs = ["data/hocap/sample.zip", "data/hocap/sample"]
+depends-on = ["_install-chumpy"]
+description = "Downloads and extracts an example polycam dataset from huggingface, this may take a while"
+
+[tool.pixi.tasks.visualize-hocap-dataset]
+cmd = """
+    python tools/view_exo_ego.py
+    """
+description = "Shows visualization of annotations in assembly101 dataset"
+depends-on = ["_download-hocap-sample"]
+
 
 [tool.pixi.tasks.pose-estimation-assembly101]
 cmd = """
@@ -83,7 +100,7 @@ description = "Runs 2d pose estimation and triangulation on body for assembly101
 
 [tool.pixi.dependencies]
 python = "==3.11"
-rerun-sdk = "0.22.*"
+rerun-sdk = ">=0.22.1"
 numpy = "<2"
 pytest = ">=8.3.4,<9"
 icecream = ">=2.1.4,<3"
@@ -93,9 +110,10 @@ py-opencv = ">=4.11.0,<5"
 cudnn = ">=9.7.1.26,<10"
 orjson = ">=3.10.15,<4"
 pip = ">=25.0.1,<26"
+open3d = ">=0.19.0,<0.20"
 
 [tool.ruff]
-line-length = 120
+line-length = 150
 select = [
     # pycodestyle
     "E",

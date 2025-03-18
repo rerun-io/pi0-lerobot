@@ -21,12 +21,12 @@ from pi0_lerobot.data.assembly101 import (
     Assembly101Dataset,
     load_assembly101,
 )
-from pi0_lerobot.multiview_pose_estimator import (
+from pi0_lerobot.pt_multiview_pose_estimator import (
     MultiviewBodyTracker,
     MVOutput,
     projectN3,
 )
-from pi0_lerobot.rerun_log_utils import create_blueprint
+from pi0_lerobot.rerun_log_utils import create_blueprint, log_video
 from pi0_lerobot.skeletons.assembly_hand import HAND_ID2NAME, HAND_IDS, HAND_LINKS
 from pi0_lerobot.skeletons.coco_17 import COCO_17_IDS, COCO_ID2NAME, COCO_LINKS
 from pi0_lerobot.video_io import MultiVideoReader
@@ -114,36 +114,6 @@ def set_pose_annotation_context() -> None:
     )
 
 
-def log_video(
-    video_path: Path, video_log_path: Path, timeline: str = "video_time"
-) -> Int[ndarray, "num_frames"]:
-    """
-    Logs a video asset and its frame timestamps.
-
-    Parameters:
-    video_path (Path): The path to the video file.
-    video_log_path (Path): The path where the video log will be saved.
-
-    Returns:
-    None
-    """
-    # Log video asset which is referred to by frame references.
-    video_asset = rr.AssetVideo(path=video_path)
-    rr.log(str(video_log_path), video_asset, static=True)
-
-    # Send automatically determined video frame timestamps.
-    frame_timestamps_ns: Int[ndarray, "num_frames"] = (  # noqa: UP037
-        video_asset.read_frame_timestamps_ns()
-    )
-    rr.send_columns(
-        f"{video_log_path}",
-        # Note timeline values don't have to be the same as the video timestamps.
-        indexes=[rr.TimeNanosColumn(timeline, frame_timestamps_ns)],
-        columns=rr.VideoFrameReference.columns_nanoseconds(frame_timestamps_ns),
-    )
-    return frame_timestamps_ns
-
-
 def run_person_detection(config: VisualzeConfig):
     start_time: float = timer()
     parent_log_path: Path = Path("world")
@@ -201,13 +171,17 @@ def run_person_detection(config: VisualzeConfig):
 
     num_send: int = len(longest_timestamp)
 
-    left_kpts_stack, right_kpts_stack = assembly101_data.kpts_3d_to_column()
-    left_kpts_stack: Float32[ndarray, "num_frames 21 3"] = left_kpts_stack[:num_send]
-    right_kpts_stack: Float32[ndarray, "num_frames 21 3"] = right_kpts_stack[:num_send]
+    left_xyz_gt_stack, right_xyz_gt_stack = assembly101_data.kpts_3d_to_column()
+    left_xyz_gt_stack: Float32[ndarray, "num_frames 21 3"] = left_xyz_gt_stack[
+        :num_send
+    ]
+    right_xyz_gt_stack: Float32[ndarray, "num_frames 21 3"] = right_xyz_gt_stack[
+        :num_send
+    ]
 
     for side, color, class_id, kpts_stack in (
-        ("left", (255, 0, 0), 0, left_kpts_stack),
-        ("right", (0, 255, 0), 1, right_kpts_stack),
+        ("left", (255, 0, 0), 0, left_xyz_gt_stack),
+        ("right", (0, 255, 0), 1, right_xyz_gt_stack),
     ):
         num_send = min(num_send, kpts_stack.shape[0])
         rr.log(
@@ -244,9 +218,6 @@ def run_person_detection(config: VisualzeConfig):
         projection_all_list.append(projection_matrix)
 
     Pall = np.array([P for P in projection_all_list])
-    P_all_filtered: Float32[ndarray, "nViews 3 4"] = np.array(
-        [projection_all_list[i] for i in cams_for_detection_idx]
-    )
 
     # filter gpu decoders to only include the cameras we want to detect on
     exo_gpu_decoders = [exo_gpu_decoders[i] for i in cams_for_detection_idx]
@@ -261,11 +232,11 @@ def run_person_detection(config: VisualzeConfig):
     top_half_mask = np.isin(np.arange(17), upper_body_filter_idx)
 
     pose_tracker = MultiviewBodyTracker(
-        Pall=P_all_filtered,
         mode="lightweight",
         backend="onnxruntime",
         device="cuda",
         filter_body_idxes=upper_body_filter_idx,
+        cams_for_detection_idx=cams_for_detection_idx,
     )
 
     for ts_idx, timestamp in enumerate(tqdm(longest_timestamp[:min_num_frames])):
@@ -273,7 +244,7 @@ def run_person_detection(config: VisualzeConfig):
         bgr_list: list[UInt8[ndarray, "H W 3"]] = [
             decoder[ts_idx].cpu().numpy() for decoder in exo_gpu_decoders
         ]
-        mv_output: MVOutput = pose_tracker(bgr_list)
+        mv_output: MVOutput = pose_tracker(bgr_list, Pall)
         for cam_idx, (exo_pinhole, (bbox, kpts_2d, scores)) in enumerate(
             zip(filtered_exo_pinhole_list, mv_output, strict=True)
         ):

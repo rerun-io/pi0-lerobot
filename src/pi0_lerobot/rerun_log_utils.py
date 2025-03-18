@@ -1,6 +1,10 @@
 from pathlib import Path
 from typing import Literal
+
+import rerun as rr
 import rerun.blueprint as rrb
+from jaxtyping import Int
+from numpy import ndarray
 
 
 def create_blueprint(
@@ -51,3 +55,33 @@ def create_blueprint(
         collapse_panels=True,
     )
     return blueprint
+
+
+def log_video(
+    video_path: Path, video_log_path: Path, timeline: str = "video_time"
+) -> Int[ndarray, "num_frames"]:
+    """
+    Logs a video asset and its frame timestamps.
+
+    Parameters:
+    video_path (Path): The path to the video file.
+    video_log_path (Path): The path where the video log will be saved.
+
+    Returns:
+    None
+    """
+    # Log video asset which is referred to by frame references.
+    video_asset = rr.AssetVideo(path=video_path)
+    rr.log(str(video_log_path), video_asset, static=True)
+
+    # Send automatically determined video frame timestamps.
+    frame_timestamps_ns: Int[ndarray, "num_frames"] = (  # noqa: UP037
+        video_asset.read_frame_timestamps_ns()
+    )
+    rr.send_columns(
+        f"{video_log_path}",
+        # Note timeline values don't have to be the same as the video timestamps.
+        indexes=[rr.TimeNanosColumn(timeline, frame_timestamps_ns)],
+        columns=rr.VideoFrameReference.columns_nanoseconds(frame_timestamps_ns),
+    )
+    return frame_timestamps_ns
