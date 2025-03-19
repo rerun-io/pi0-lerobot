@@ -29,6 +29,7 @@ def projectN3(
 
 @dataclass
 class MVOutput:
+    tracked: bool = False
     bboxes: list[Float32[ndarray, "1 4"] | None] = field(default_factory=list)
     kpts_2d: list[Float32[ndarray, "num_kpts 2"] | None] = field(default_factory=list)
     scores_2d: list[Float32[ndarray, "num_kpts"] | None] = field(default_factory=list)
@@ -43,6 +44,9 @@ class MVOutput:
         # Zips the bboxes, kpts_2d, and scores lists so each iteration
         # returns a tuple (bbox, kpt2d, score)
         return iter(zip(self.bboxes, self.kpts_2d, self.scores_2d, strict=True))
+
+
+def log_mvoutput(mv_output: MVOutput): ...
 
 
 class MultiviewBodyTracker:
@@ -69,21 +73,20 @@ class MultiviewBodyTracker:
 
     def __init__(
         self,
-        Pall: Float32[ndarray, "n_views 3 4"],
         det: str = None,
         det_input_size: tuple = (640, 640),
         pose: str = None,
         pose_input_size: tuple = (288, 384),
         mode: Literal["lightweight", "balanced", "performance"] = "balanced",
-        to_openpose: bool = False,
         backend: str = "onnxruntime",
         device: str = "cpu",
         keypoint_threshold: float = 0.3,
-        filter_body_idxes: Int[ndarray, "idx"] = None,
+        cams_for_detection_idx: list[int] | None = None,
+        filter_body_idxes: Int[ndarray, "idx"] | None = None,
     ) -> None:
-        self.Pall = Pall
         self.keypoint_threshold = keypoint_threshold
         self.filter_body_idxes = filter_body_idxes
+        self.cams_for_detection_idx = cams_for_detection_idx
         if pose is None:
             pose = self.MODE[mode]["pose"]
             pose_input_size = self.MODE[mode]["pose_input_size"]
@@ -98,7 +101,7 @@ class MultiviewBodyTracker:
         self.pose_model = RTMPose(
             pose,
             model_input_size=pose_input_size,
-            to_openpose=to_openpose,
+            to_openpose=False,
             backend=backend,
             device=device,
         )
@@ -106,11 +109,20 @@ class MultiviewBodyTracker:
         self.prev_bboxes = None
         self.prev_kpts_3d_t1 = None
         self.prev_kpts_3d_t2 = None
+        self.tracked: bool = False
 
-    def __call__(self, bgr_list: list[BgrImageType]) -> MVOutput:
+    def __call__(
+        self,
+        bgr_list: list[BgrImageType],
+        Pall: Float32[ndarray, "n_views 3 4"],
+    ) -> MVOutput:
         """
         Assumes to be only one person in the image, take the highest score person
         """
+        if self.cams_for_detection_idx is not None:
+            Pall: Float32[ndarray, "nViews 3 4"] = np.array(
+                [Pall[i] for i in self.cams_for_detection_idx]
+            )
         # initalize with emtpy and fill in the values
         mv_output = MVOutput()
         uvc_list = []
@@ -123,7 +135,7 @@ class MultiviewBodyTracker:
             mv_output.kpts_3d_extrapolated = xyzc_extrap
             # project the extrapolated 3d keypoints to 2d
             uvc_extrap: Float[ndarray, "n_views n_kpts 3"] = projectN3(
-                xyzc_extrap, self.Pall
+                xyzc_extrap, Pall
             )
             mv_output.uvc_extrap = uvc_extrap
             bbox_extrap_list = []
@@ -194,7 +206,7 @@ class MultiviewBodyTracker:
         multiview_uvc: Float32[ndarray, "n_views num_kpts 3"] = np.stack(uvc_list)
         xyzc: Float64[ndarray, "num_kpts 4"] = batch_triangulate(
             keypoints_2d=multiview_uvc,
-            projection_matrices=self.Pall,
+            projection_matrices=Pall,
             min_views=3,
         )
 
@@ -206,6 +218,7 @@ class MultiviewBodyTracker:
         ):
             self.prev_kpts_3d_t1 = None
             self.prev_kpts_3d_t2 = None
+            self.tracked = False
 
         self.prev_kpts_3d_t2 = self.prev_kpts_3d_t1
         self.prev_kpts_3d_t1 = xyzc.astype(np.float32)
@@ -215,6 +228,7 @@ class MultiviewBodyTracker:
 
         mv_output.kpts_3d_t1 = self.prev_kpts_3d_t1
         mv_output.kpts_3d_t2 = self.prev_kpts_3d_t2
+        mv_output.tracked = self.tracked
 
         return mv_output
 

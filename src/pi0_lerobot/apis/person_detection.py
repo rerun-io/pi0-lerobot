@@ -6,30 +6,26 @@ from typing import Literal
 import numpy as np
 import rerun as rr
 import rerun.blueprint as rrb
-from einops import rearrange
 from jaxtyping import Float32, Float64, Int, UInt8
 from numpy import ndarray
-from simplecv.camera_parameters import (
-    PinholeParameters,
-)
-from simplecv.rerun_log_utils import RerunTyroConfig, log_pinhole
+from simplecv.apis.view_exoego_data import log_exo_ego_sequence_batch
+from simplecv.camera_parameters import PinholeParameters
+from simplecv.data.exoego.assembly_101 import Assembely101Sequence
+from simplecv.data.exoego.base_exo_ego import BaseExoEgoSequence, ExoBatchData, ExoData
+from simplecv.data.exoego.hocap import HOCapSequence, SubjectIDs
+from simplecv.rerun_log_utils import RerunTyroConfig, log_pinhole, log_video
+from simplecv.video_io import MultiVideoReader
 from torchcodec.decoders import VideoDecoder
 from tqdm import tqdm
 
 from pi0_lerobot.custom_types import CustomPoints2D, CustomPoints3D
-from pi0_lerobot.data.assembly101 import (
-    Assembly101Dataset,
-    load_assembly101,
-)
-from pi0_lerobot.pt_multiview_pose_estimator import (
+from pi0_lerobot.multiview_pose_estimator import (
     MultiviewBodyTracker,
     MVOutput,
     projectN3,
 )
-from pi0_lerobot.rerun_log_utils import create_blueprint, log_video
-from pi0_lerobot.skeletons.assembly_hand import HAND_ID2NAME, HAND_IDS, HAND_LINKS
+from pi0_lerobot.rerun_log_utils import create_blueprint
 from pi0_lerobot.skeletons.coco_17 import COCO_17_IDS, COCO_ID2NAME, COCO_LINKS
-from pi0_lerobot.video_io import MultiVideoReader
 
 np.set_printoptions(suppress=True)
 
@@ -37,15 +33,17 @@ np.set_printoptions(suppress=True)
 @dataclass
 class VisualzeConfig:
     rr_config: RerunTyroConfig
-    root_directory: Path = Path("data/assembly101-sample")
-    example_name: str = (
-        "nusar-2021_action_both_9012-c07c_9012_user_id_2021-02-01_164345"
-    )
-    num_videos_to_log: Literal[4, 8] = 4
+    dataset: Literal["hocap", "assembly101"] = "hocap"
+    root_directory: Path = Path("data/hocap/sample")
+    subject_id: SubjectIDs | None = "8"
+    sequence_name: str = "20231024_180733"
+    num_videos_to_log: Literal[4, 8] = 8
+    log_depths: bool = False
     log_extrapolated_keypoints: bool = False
+    send_as_batch: bool = True
 
 
-def set_pose_annotation_context() -> None:
+def set_pose_annotation_context(sequence: BaseExoEgoSequence) -> None:
     rr.log(
         "/",
         rr.AnnotationContext(
@@ -54,17 +52,17 @@ def set_pose_annotation_context() -> None:
                     info=rr.AnnotationInfo(id=0, label="Left Hand", color=(0, 0, 255)),
                     keypoint_annotations=[
                         rr.AnnotationInfo(id=id, label=name)
-                        for id, name in HAND_ID2NAME.items()
+                        for id, name in sequence.hand_id2name.items()
                     ],
-                    keypoint_connections=HAND_LINKS,
+                    keypoint_connections=sequence.hand_links,
                 ),
                 rr.ClassDescription(
                     info=rr.AnnotationInfo(id=1, label="Right Hand", color=(0, 0, 255)),
                     keypoint_annotations=[
                         rr.AnnotationInfo(id=id, label=name)
-                        for id, name in HAND_ID2NAME.items()
+                        for id, name in sequence.hand_id2name.items()
                     ],
-                    keypoint_connections=HAND_LINKS,
+                    keypoint_connections=sequence.hand_links,
                 ),
                 rr.ClassDescription(
                     info=rr.AnnotationInfo(
@@ -118,35 +116,56 @@ def run_person_detection(config: VisualzeConfig):
     start_time: float = timer()
     parent_log_path: Path = Path("world")
     timeline: str = "video_time"
-    rr.log("/", rr.ViewCoordinates.BUL, static=True)
-    set_pose_annotation_context()
 
     # load data
-    assembly101_data: Assembly101Dataset = load_assembly101(
-        config.root_directory, config.example_name, load_2d=False, load_3d=True
-    )
-    exo_video_readers: MultiVideoReader = assembly101_data.exo_video_readers
+    match config.dataset:
+        case "hocap":
+            sequence: HOCapSequence = HOCapSequence(
+                data_path=config.root_directory,
+                sequence_name=config.sequence_name,
+                subject_id=config.subject_id,
+                load_labels=True,
+            )
+        case "assembly101":
+            sequence: Assembely101Sequence = Assembely101Sequence(
+                data_path=config.root_directory,
+                sequence_name=config.sequence_name,
+                subject_id=None,
+                load_labels=True,
+            )
+    set_pose_annotation_context(sequence=sequence)
+    rr.log("/", sequence.world_coordinate_system, static=True)
+
+    exo_video_readers: MultiVideoReader = sequence.exo_video_readers
+    exo_video_files: list[Path] = exo_video_readers.video_paths
+    exo_cam_log_paths: list[Path] = [
+        parent_log_path / exo_cam.name for exo_cam in sequence.exo_cam_list
+    ]
+    exo_video_log_paths: list[Path] = [
+        cam_log_paths / "pinhole" / "video" for cam_log_paths in exo_cam_log_paths
+    ]
     exo_gpu_decoders: list[VideoDecoder] = [
         VideoDecoder(exo_path, device="cuda", dimension_order="NHWC")
-        for exo_path in assembly101_data.exo_video_readers.video_paths
+        for exo_path in exo_video_files
     ]
-    exo_pinhole_list: list[PinholeParameters] = assembly101_data.exo_pinhole_list
-    exo_video_files: list[Path] = exo_video_readers.video_paths
+
+    blueprint: rrb.Blueprint = create_blueprint(
+        exo_video_log_paths, num_videos_to_log=config.num_videos_to_log
+    )
+    rr.send_blueprint(blueprint)
 
     # log pinhole parameters
-    for cam_params in exo_pinhole_list:
+    for exo_cam in sequence.exo_cam_list:
+        cam_log_path: Path = parent_log_path / exo_cam.name
+        image_plane_distance: float = 0.1 if config.dataset == "hocap" else 100.0
         log_pinhole(
-            cam_params,
-            cam_log_path=parent_log_path / cam_params.name,
-            image_plane_distance=100.0,
+            camera=exo_cam,
+            cam_log_path=cam_log_path,
+            image_plane_distance=image_plane_distance,
             static=True,
         )
 
     all_timestamps: list[Int[ndarray, "num_frames"]] = []  # noqa: UP037
-    exo_video_log_paths: list[Path] = [
-        parent_log_path / video_file.stem.split("_")[0] / "pinhole" / "video"
-        for video_file in exo_video_files
-    ]
 
     blueprint: rrb.Blueprint = create_blueprint(
         exo_video_log_paths=exo_video_log_paths,
@@ -165,53 +184,28 @@ def run_person_detection(config: VisualzeConfig):
         all_timestamps.append(frame_timestamps_ns)
 
     # Find the timestamp list with the maximum length.
-    longest_timestamp: Int[ndarray, "num_frames"] = max(all_timestamps, key=len)  # noqa: UP037
+    shortest_timestamp: Int[ndarray, "num_frames"] = min(all_timestamps, key=len)  # noqa: UP037
+    assert len(shortest_timestamp) == len(sequence), (
+        f"Length of timestamps {len(shortest_timestamp)} and sequence {len(sequence)} do not match"
+    )
 
     print(f"Time taken to load data: {timer() - start_time:.2f} seconds")
 
-    num_send: int = len(longest_timestamp)
+    log_exo_ego_sequence_batch(
+        sequence=sequence,
+        shortest_timestamp=shortest_timestamp,
+        parent_log_path=parent_log_path,
+        timeline=timeline,
+        log_depth=False,
+    )
 
-    left_xyz_gt_stack, right_xyz_gt_stack = assembly101_data.kpts_3d_to_column()
-    left_xyz_gt_stack: Float32[ndarray, "num_frames 21 3"] = left_xyz_gt_stack[
-        :num_send
-    ]
-    right_xyz_gt_stack: Float32[ndarray, "num_frames 21 3"] = right_xyz_gt_stack[
-        :num_send
-    ]
-
-    for side, color, class_id, kpts_stack in (
-        ("left", (255, 0, 0), 0, left_xyz_gt_stack),
-        ("right", (0, 255, 0), 1, right_xyz_gt_stack),
-    ):
-        num_send = min(num_send, kpts_stack.shape[0])
-        rr.log(
-            side,
-            rr.Points3D.from_fields(
-                colors=color,
-                class_ids=class_id,
-                keypoint_ids=HAND_IDS,
-                show_labels=False,
-            ),
-            static=True,
-        )
-
-        rr.send_columns(
-            side,
-            indexes=[rr.TimeNanosColumn(timeline, longest_timestamp[0:num_send])],
-            columns=[
-                *rr.Points3D.columns(
-                    positions=rearrange(
-                        kpts_stack,
-                        "num_frames kpts dim -> (num_frames kpts) dim",
-                    ),
-                ).partition(lengths=[21] * num_send),
-            ],
-        )
-
-    cams_for_detection_idx: list[int] = [0, 2, 3, 5]
+    if config.dataset == "hocap":
+        cams_for_detection_idx: list[int] = [1, 3, 5, 6]
+    else:
+        cams_for_detection_idx: list[int] = [0, 1, 2, 3]
 
     projection_all_list: list[Float32[np.ndarray, "3 4"]] = []
-    for exo_cam in exo_pinhole_list:
+    for exo_cam in sequence.exo_cam_list:
         projection_matrix: Float32[ndarray, "3 4"] = exo_cam.projection_matrix.astype(
             np.float32
         )
@@ -220,8 +214,12 @@ def run_person_detection(config: VisualzeConfig):
     Pall = np.array([P for P in projection_all_list])
 
     # filter gpu decoders to only include the cameras we want to detect on
-    exo_gpu_decoders = [exo_gpu_decoders[i] for i in cams_for_detection_idx]
-    filtered_exo_pinhole_list = [exo_pinhole_list[i] for i in cams_for_detection_idx]
+    exo_gpu_decoders: list[VideoDecoder] = [
+        exo_gpu_decoders[i] for i in cams_for_detection_idx
+    ]
+    filtered_exo_pinhole_list: list[PinholeParameters] = [
+        sequence.exo_cam_list[i] for i in cams_for_detection_idx
+    ]
 
     min_num_frames: int = min(
         [decoder.metadata.num_frames for decoder in exo_gpu_decoders]
@@ -239,7 +237,7 @@ def run_person_detection(config: VisualzeConfig):
         cams_for_detection_idx=cams_for_detection_idx,
     )
 
-    for ts_idx, timestamp in enumerate(tqdm(longest_timestamp[:min_num_frames])):
+    for ts_idx, timestamp in enumerate(tqdm(shortest_timestamp[:min_num_frames])):
         rr.set_time_nanos(timeline="video_time", nanos=timestamp)
         bgr_list: list[UInt8[ndarray, "H W 3"]] = [
             decoder[ts_idx].cpu().numpy() for decoder in exo_gpu_decoders
@@ -334,7 +332,7 @@ def run_person_detection(config: VisualzeConfig):
             xyzc, Pall
         ).astype(np.float32)
         for all_exo_pinhole, uvc_projected in zip(
-            exo_pinhole_list, mv_uvc_projected, strict=True
+            sequence.exo_cam_list, mv_uvc_projected, strict=True
         ):
             proj_log_path: Path = (
                 parent_log_path / all_exo_pinhole.name / "pinhole" / "video"
