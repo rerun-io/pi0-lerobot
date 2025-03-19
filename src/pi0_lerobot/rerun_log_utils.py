@@ -13,16 +13,26 @@ def create_blueprint(
     active_tab: int = 0  # 0 for video, 1 for images
     main_view = rrb.Vertical(
         contents=[
-            rrb.Spatial3DView(
-                origin="/",
+            rrb.Tabs(
+                rrb.Spatial3DView(
+                    origin="/",
+                ),
+                rrb.Spatial3DView(
+                    origin="/",
+                    contents=[
+                        "+ $origin/**",
+                        "- /world/mesh",
+                    ],
+                ),
+                active_tab=active_tab,
             ),
             # take the first 4 video files
             rrb.Horizontal(
                 contents=[
                     rrb.Tabs(
-                        rrb.Spatial2DView(origin=f"{video_log_path}"),
+                        rrb.Spatial2DView(origin=f"{video_log_path.parent}"),
                         rrb.Spatial2DView(
-                            origin=f"{video_log_path}".replace("video", "image")
+                            origin=f"{video_log_path}".replace("video", "depth"),
                         ),
                         active_tab=active_tab,
                     )
@@ -35,8 +45,8 @@ def create_blueprint(
     additional_views = rrb.Vertical(
         contents=[
             rrb.Tabs(
-                rrb.Spatial2DView(origin=f"{video_log_path}"),
-                rrb.Spatial2DView(origin=f"{video_log_path}".replace("video", "image")),
+                rrb.Spatial2DView(origin=f"{video_log_path.parent}"),
+                rrb.Spatial2DView(origin=f"{video_log_path}".replace("video", "depth")),
                 active_tab=active_tab,
             )
             for video_log_path in exo_video_log_paths[4:]

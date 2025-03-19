@@ -129,7 +129,7 @@ def create_blueprint(
 def log_exo_ego_sequence_batch(
     sequence: BaseExoEgoSequence,
     *,
-    shortest_timestamp,
+    shortest_timestamp: Int[ndarray, "num_frames"],
     parent_log_path: Path,
     timeline: str,
     log_depth: bool = True,
@@ -221,7 +221,7 @@ def log_exo_ego_sequence_batch(
 def log_exo_ego_sequence_incremental(
     sequence: BaseExoEgoSequence,
     *,
-    shortest_timestamp,
+    shortest_timestamp: Int[ndarray, "num_frames"],
     parent_log_path: Path,
     timeline: str,
     log_img: bool = False,

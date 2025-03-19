@@ -93,10 +93,21 @@ depends-on = ["_download-hocap-sample"]
 
 [tool.pixi.tasks.pose-estimation-assembly101]
 cmd = """
-python tools/person_detection_assembly.py
+python tools/person_3d_detection.py \
+    --root-directory data/assembly101-sample/ \
+    --sequence-name nusar-2021_action_both_9012-c07c_9012_user_id_2021-02-01_164345 \
+    --dataset assembly101
+    --num-videos-to-log 4
 """
 depends-on = ["_download-assembly101-sample"]
 description = "Runs 2d pose estimation and triangulation on body for assembly101 dataset"
+
+[tool.pixi.tasks.pose-estimation-hocap]
+cmd = """
+python tools/person_3d_detection.py
+"""
+depends-on = ["_download-hocap-sample"]
+description = "Runs 2d pose estimation and triangulation on body for hocap dataset"
 
 [tool.pixi.dependencies]
 python = "==3.11"
