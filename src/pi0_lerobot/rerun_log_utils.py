@@ -3,8 +3,14 @@ from typing import Literal
 
 import rerun as rr
 import rerun.blueprint as rrb
-from jaxtyping import Int
+import torch
+from einops import rearrange
+from jaxtyping import Float32, Int
 from numpy import ndarray
+from simplecv.data.exoego.base_exo_ego import BaseExoEgoSequence
+from tqdm import tqdm
+
+from pi0_lerobot.mano_utils import MANOLayer
 
 
 def create_blueprint(
@@ -67,31 +73,70 @@ def create_blueprint(
     return blueprint
 
 
-def log_video(
-    video_path: Path, video_log_path: Path, timeline: str = "video_time"
-) -> Int[ndarray, "num_frames"]:
-    """
-    Logs a video asset and its frame timestamps.
-
-    Parameters:
-    video_path (Path): The path to the video file.
-    video_log_path (Path): The path where the video log will be saved.
-
-    Returns:
-    None
-    """
-    # Log video asset which is referred to by frame references.
-    video_asset = rr.AssetVideo(path=video_path)
-    rr.log(str(video_log_path), video_asset, static=True)
-
-    # Send automatically determined video frame timestamps.
-    frame_timestamps_ns: Int[ndarray, "num_frames"] = (  # noqa: UP037
-        video_asset.read_frame_timestamps_ns()
+def log_mano_batch(
+    sequence: BaseExoEgoSequence,
+    shortest_timestamp: Int[ndarray, "num_frames"],
+    timeline: str,
+) -> None:
+    mano_poses: Float32[torch.Tensor, "num_frames 2 51"] = torch.from_numpy(
+        sequence.exo_batch_data.mano_stack.poses
     )
-    rr.send_columns(
-        f"{video_log_path}",
-        # Note timeline values don't have to be the same as the video timestamps.
-        indexes=[rr.TimeNanosColumn(timeline, frame_timestamps_ns)],
-        columns=rr.VideoFrameReference.columns_nanoseconds(frame_timestamps_ns),
+
+    # order is important here
+    hand_sides: list[str] = ["right", "left"]
+    mano_layers: list[MANOLayer] = [
+        MANOLayer(
+            side=side,
+            betas=sequence.exo_batch_data.mano_stack.betas,
+            mano_root_dir=Path("data/mano_models/mano_v1_2/models"),
+        )
+        for side in hand_sides
+    ]
+
+    pbar = tqdm(
+        enumerate(
+            zip(
+                hand_sides,
+                mano_layers,
+                strict=True,
+            )
+        ),
+        desc="Logging hand keypoints",
+        total=2,
     )
-    return frame_timestamps_ns
+
+    for hand_idx, (hand_side, mano_layer) in pbar:
+        poses: Float32[torch.Tensor, "num_frames 48"] = mano_poses[:, hand_idx, :48]
+        translations: Float32[torch.Tensor, "num_frames 3"] = mano_poses[
+            :, hand_idx, 48:51
+        ]
+        mano_outputs: tuple[
+            Float32[torch.Tensor, "num_frames 778 3"],
+            Float32[torch.Tensor, "num_frames 21 3"],
+        ] = mano_layer(poses, translations)
+        verts: Float32[torch.Tensor, "num_frames 778 3"] = mano_outputs[0]
+        joints: Float32[torch.Tensor, "num_frames 21 3"] = mano_outputs[1]
+
+        rr.log(
+            f"mano_{mano_layer.side}",
+            rr.Points3D.from_fields(
+                # radii=0.005,
+                show_labels=False,
+            ),
+            static=True,
+        )
+
+        rr.send_columns(
+            f"mano_{mano_layer.side}",
+            indexes=[
+                rr.TimeNanosColumn(timeline, shortest_timestamp[0 : len(sequence)])
+            ],
+            columns=[
+                *rr.Points3D.columns(
+                    positions=rearrange(
+                        verts,
+                        "num_frames kpts dim -> (num_frames kpts) dim",
+                    ),
+                ).partition(lengths=[778] * len(sequence)),
+            ],
+        )
