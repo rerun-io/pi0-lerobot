@@ -33,7 +33,7 @@ openpi-client = { git = "https://github.com/Physical-Intelligence/openpi.git", s
 lerobot = { git = "https://github.com/huggingface/lerobot", rev = "8548a87bd49c19bcda64cf0d6f205a378c1cebc3", extras = [
     "pusht",
 ] }
-simplecv = { git = "https://github.com/pablovela5620/simplecv.git", rev = "950bd1f0a9c9389d8d44f6361ff182c16f5b5b12" }
+simplecv = { git = "https://github.com/pablovela5620/simplecv.git", rev = "a279fb50e2e332cbf99fcb885c086b916bb3fd16" }
 rtmlib = { git = "https://github.com/pablovela5620/rtmlib.git" }
 torch = { version = ">=2.5.1", index = "https://download.pytorch.org/whl/cu124" }
 torchvision = { version = ">=0.20.1", index = "https://download.pytorch.org/whl/cu124" }

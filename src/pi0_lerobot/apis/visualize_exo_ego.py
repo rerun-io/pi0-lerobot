@@ -218,66 +218,73 @@ def log_exo_ego_sequence_batch(
         )
 
 
-def log_exo_ego_sequence_incremental(
+def log_mano_batch(
     sequence: BaseExoEgoSequence,
-    *,
     shortest_timestamp: Int[ndarray, "num_frames"],
-    parent_log_path: Path,
     timeline: str,
-    log_img: bool = False,
 ) -> None:
-    exo_data: ExoData
-    pbar = tqdm(
-        zip(shortest_timestamp, sequence, strict=True),
-        total=len(shortest_timestamp),
+    mano_poses: Float32[torch.Tensor, "num_frames 2 51"] = torch.from_numpy(
+        sequence.exo_batch_data.mano_stack.poses
     )
-    for timestamp, exo_data in pbar:
-        rr.set_time_nanos(timeline=timeline, nanos=timestamp)
-        # log 3d keypoints
-        for hand_idx, (hand_side, color, class_id) in enumerate(
-            (
-                ("left", (0, 255, 0), 0),
-                ("right", (0, 255, 0), 1),
+
+    # order is important here
+    hand_sides: list[str] = ["right", "left"]
+    mano_layers: list[MANOLayer] = [
+        MANOLayer(
+            side=side,
+            betas=sequence.exo_batch_data.mano_stack.betas,
+            mano_root_dir=Path("data/mano_models/mano_v1_2/models"),
+        )
+        for side in hand_sides
+    ]
+
+    pbar = tqdm(
+        enumerate(
+            zip(
+                hand_sides,
+                mano_layers,
+                strict=True,
             )
-        ):
-            xyz: Float32[ndarray, "21 3"] = exo_data.xyz[hand_idx]
-            rr.log(
-                hand_side,
-                rr.Points3D(
-                    xyz,
-                    colors=color,
-                    class_ids=class_id,
-                    keypoint_ids=sequence.hand_ids,
-                    show_labels=False,
-                ),
-            )
-            for cam_param, bgr in zip(
-                exo_data.cam_params_list, exo_data.bgr_list, strict=True
-            ):
-                uv: Float32[ndarray, "21 2"] = exo_data.uv_dict[cam_param.name][
-                    hand_idx
-                ]
-                uv[uv == -1] = np.nan
-                image_log_path: Path = (
-                    parent_log_path / cam_param.name / "pinhole" / "video"
-                )
-                rr.log(
-                    f"{image_log_path}/{hand_side}",
-                    rr.Points2D(
-                        uv,
-                        colors=color,
-                        class_ids=class_id,
-                        keypoint_ids=sequence.hand_ids,
-                        show_labels=False,
+        ),
+        desc="Logging hand keypoints",
+        total=2,
+    )
+
+    for hand_idx, (hand_side, mano_layer) in pbar:
+        poses: Float32[torch.Tensor, "num_frames 48"] = mano_poses[:, hand_idx, :48]
+        translations: Float32[torch.Tensor, "num_frames 3"] = mano_poses[
+            :, hand_idx, 48:51
+        ]
+        mano_outputs: tuple[
+            Float32[torch.Tensor, "num_frames 778 3"],
+            Float32[torch.Tensor, "num_frames 21 3"],
+        ] = mano_layer(poses, translations)
+        verts: Float32[torch.Tensor, "num_frames 778 3"] = mano_outputs[0]
+        joints: Float32[torch.Tensor, "num_frames 21 3"] = mano_outputs[1]
+
+        rr.log(
+            f"mano_{mano_layer.side}",
+            rr.Points3D.from_fields(
+                # radii=0.005,
+                show_labels=False,
+            ),
+            static=True,
+        )
+
+        rr.send_columns(
+            f"mano_{mano_layer.side}",
+            indexes=[
+                rr.TimeNanosColumn(timeline, shortest_timestamp[0 : len(sequence)])
+            ],
+            columns=[
+                *rr.Points3D.columns(
+                    positions=rearrange(
+                        verts,
+                        "num_frames kpts dim -> (num_frames kpts) dim",
                     ),
-                )
-                if log_img:
-                    rr.log(
-                        f"{parent_log_path}/{cam_param.name}/pinhole/image",
-                        rr.Image(
-                            bgr,
-                        ).compress(jpeg_quality=75),
-                    )
+                ).partition(lengths=[778] * len(sequence)),
+            ],
+        )
 
 
 def log_depths(
@@ -327,54 +334,9 @@ def log_depths(
         print("No depth images found.")
 
 
-@serde
-class CalibratedMano:
-    betas: Float32[ndarray, "10"]
-
-
-def load_mano_poses(
-    data_path: Path,
-    sequence_name: str,
-    subject_id: str,
-) -> tuple[CalibratedMano, Float32[torch.Tensor, "num_sides num_frames 51"]]:
-    subject_mano_yaml: Path = (
-        data_path / "calibration" / "mano" / f"subject_{subject_id}.yaml"
-    )
-    assert subject_mano_yaml.exists(), f"Path {subject_mano_yaml} does not exist."
-    # load yaml file to str
-    with open(subject_mano_yaml) as file:
-        subject_mano_str: str = file.read()
-
-    subject_mano: CalibratedMano = from_yaml(CalibratedMano, subject_mano_str)
-    poses_path: Path = data_path / "poses" / f"subject_{subject_id}" / sequence_name
-    assert poses_path.exists(), f"Path {poses_path} does not exist."
-    mano_poses: Path = poses_path / "poses_m.npy"
-    # 0 for right hand, 1 for left hand
-    mano_poses: Float32[ndarray, "num_sides num_frames 51"] = np.load(mano_poses)
-    mano_poses: Float32[torch.Tensor, "num_sides num_frames 51"] = torch.from_numpy(
-        mano_poses
-    )
-    return subject_mano, mano_poses
-
-
 def visualize_exo_ego(config: VisualzeConfig):
     start_time: float = timer()
 
-    # load mano poses
-    subject_mano, mano_poses = load_mano_poses(
-        data_path=config.root_directory,
-        sequence_name=config.sequence_name,
-        subject_id=config.subject_id,
-    )
-
-    mano_layers: list[MANOLayer] = [
-        MANOLayer(
-            side=side,
-            betas=subject_mano.betas,
-            mano_root_dir=Path("data/mano_models/mano_v1_2/models"),
-        )
-        for side in ("right", "left")
-    ]
     match config.dataset:
         case "hocap":
             sequence: HOCapSequence = HOCapSequence(
@@ -439,53 +401,16 @@ def visualize_exo_ego(config: VisualzeConfig):
         f"Length of timestamps {len(shortest_timestamp)} and sequence {len(sequence)} do not match"
     )
 
-    for mano_pose, mano_layer in zip(mano_poses, mano_layers, strict=True):
-        poses: Float32[torch.Tensor, "num_frames 48"] = mano_pose[:, :48]
-        translations: Float32[torch.Tensor, "num_frames 3"] = mano_pose[:, 48:51]
-        mano_outputs: tuple[
-            Float32[torch.Tensor, "num_frames 778 3"],
-            Float32[torch.Tensor, "num_frames 21 3"],
-        ] = mano_layer(poses, translations)
-        verts: Float32[torch.Tensor, "num_frames 778 3"] = mano_outputs[0]
-        joints: Float32[torch.Tensor, "num_frames 21 3"] = mano_outputs[1]
-
-        rr.log(
-            f"mano_{mano_layer.side}",
-            rr.Points3D.from_fields(
-                # radii=0.005,
-                show_labels=False,
-            ),
-            static=True,
-        )
-
-        rr.send_columns(
-            f"mano_{mano_layer.side}",
-            indexes=[
-                rr.TimeNanosColumn(timeline, shortest_timestamp[0 : len(sequence)])
-            ],
-            columns=[
-                *rr.Points3D.columns(
-                    positions=rearrange(
-                        verts,
-                        "num_frames kpts dim -> (num_frames kpts) dim",
-                    ),
-                ).partition(lengths=[778] * len(sequence)),
-            ],
-        )
-
-    if config.send_as_batch:
-        log_exo_ego_sequence_batch(
-            sequence,
-            shortest_timestamp=shortest_timestamp,
-            parent_log_path=parent_log_path,
-            timeline=timeline,
-            log_depth=config.log_depths,
-        )
-    else:
-        log_exo_ego_sequence_incremental(
-            sequence,
-            shortest_timestamp=shortest_timestamp,
-            parent_log_path=parent_log_path,
-            timeline=timeline,
-        )
+    log_exo_ego_sequence_batch(
+        sequence,
+        shortest_timestamp=shortest_timestamp,
+        parent_log_path=parent_log_path,
+        timeline=timeline,
+        log_depth=config.log_depths,
+    )
+    log_mano_batch(
+        sequence,
+        shortest_timestamp=shortest_timestamp,
+        timeline=timeline,
+    )
     print(f"Time taken to load data: {timer() - start_time:.2f} seconds")
