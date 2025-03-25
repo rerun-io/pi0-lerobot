@@ -32,6 +32,21 @@ cd pi0-lerobot
 ```
 
 ## Usage
+### Camera Calibration using VGGT
+
+<p align="center">
+  <img src="media/camera-calib-comparison.gif" alt="example calibration" width="640" />
+</p>
+
+Get camera intrinsics/extrinsics, depth maps, and pointcloud for a set of multiview images from hocap
+
+
+To run camera calibration on a sequence run
+```bash
+pixi run calibrate-cameras-vggt
+```
+
+
 ### Human Pose and Kinematics
 
 <p align="center">

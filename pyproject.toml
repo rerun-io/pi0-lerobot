@@ -34,13 +34,30 @@ lerobot = { git = "https://github.com/huggingface/lerobot", rev = "8548a87bd49c1
     "pusht",
 ] }
 simplecv = { git = "https://github.com/pablovela5620/simplecv.git", rev = "a279fb50e2e332cbf99fcb885c086b916bb3fd16" }
+mini-dust3r = { git = "https://github.com/pablovela5620/mini-dust3r.git", rev = "e122eab71d66f5b89cdef6e70c5ff71dcf8b34b6" }
 rtmlib = { git = "https://github.com/pablovela5620/rtmlib.git" }
 torch = { version = ">=2.5.1", index = "https://download.pytorch.org/whl/cu124" }
 torchvision = { version = ">=0.20.1", index = "https://download.pytorch.org/whl/cu124" }
 torchcodec = { version = ">=0.2.0", index = "https://download.pytorch.org/whl/cu124" }
 manopth = { git = "https://github.com/gobanana520/manopth.git" }
+vggt = { git = "https://github.com/facebookresearch/vggt.git", rev = "f8bf73ac25d5089cca2d6540a185697087fa2255" }
 
 # gradio-rerun = { url = "https://huggingface.co/datasets/pablovela5620/gradio-rr-wheels/resolve/main/gradio_rerun-0.0.11-py3-none-any.whl" }
+
+[tool.pixi.dependencies]
+python = "==3.11"
+rerun-sdk = ">=0.22.1"
+numpy = "<2"
+pytest = ">=8.3.4,<9"
+icecream = ">=2.1.4,<3"
+jupyterlab = ">=4.3.5,<5"
+mmengine = ">=0.10.5,<0.11"
+py-opencv = ">=4.11.0,<5"
+cudnn = ">=9.7.1.26,<10"
+orjson = ">=3.10.15,<4"
+pip = ">=25.0.1,<26"
+open3d = ">=0.19.0,<0.20"
+
 
 [tool.pixi.tasks]
 notebook_tutorial = { cmd = "jupyter lab notebooks", description = "Starts jupyter lab with notebooks for lerobot tutorials" }
@@ -109,19 +126,14 @@ python tools/person_3d_detection.py
 depends-on = ["_download-hocap-sample"]
 description = "Runs 2d pose estimation and triangulation on body for hocap dataset"
 
-[tool.pixi.dependencies]
-python = "==3.11"
-rerun-sdk = ">=0.22.1"
-numpy = "<2"
-pytest = ">=8.3.4,<9"
-icecream = ">=2.1.4,<3"
-jupyterlab = ">=4.3.5,<5"
-mmengine = ">=0.10.5,<0.11"
-py-opencv = ">=4.11.0,<5"
-cudnn = ">=9.7.1.26,<10"
-orjson = ">=3.10.15,<4"
-pip = ">=25.0.1,<26"
-open3d = ">=0.19.0,<0.20"
+[tool.pixi.tasks.calibrate-cameras-vggt]
+cmd = """
+python tools/calibrate_camera.py \
+    --calibration-method vggt
+"""
+depends-on = ["_download-hocap-sample"]
+description = "Calibrates camera using vggt method instead of using builtin calibration"
+
 
 [tool.ruff]
 line-length = 150
