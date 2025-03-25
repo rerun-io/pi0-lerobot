@@ -44,8 +44,6 @@ class CameraCalibConfig:
     root_directory: Path = Path("/mnt/12tbdrive/data/HO-cap/sample")
     subject_id: SubjectIDs | None = "8"
     sequence_name: str = "20231024_180733"
-    # subject_id: SubjectIDs | None = "5"
-    # sequence_name: str = "20231027_113202"
     num_videos_to_log: Literal[4, 8] = 8
     log_depths: bool = False
     send_as_batch: bool = True
