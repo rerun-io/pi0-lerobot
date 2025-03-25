@@ -126,6 +126,14 @@ python tools/person_3d_detection.py
 depends-on = ["_download-hocap-sample"]
 description = "Runs 2d pose estimation and triangulation on body for hocap dataset"
 
+[tool.pixi.tasks.calibrate-cameras-vggt]
+cmd = """
+python tools/calibrate_camera.py \
+    --calibration-method vggt
+"""
+depends-on = ["_download-hocap-sample"]
+description = "Calibrates camera using vggt method instead of using builtin calibration"
+
 
 [tool.ruff]
 line-length = 150
