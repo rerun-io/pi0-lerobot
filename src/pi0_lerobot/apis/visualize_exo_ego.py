@@ -40,16 +40,14 @@ def set_pose_annotation_context(sequence: BaseExoEgoSequence) -> None:
                 rr.ClassDescription(
                     info=rr.AnnotationInfo(id=0, label="Left Hand", color=(255, 0, 0)),
                     keypoint_annotations=[
-                        rr.AnnotationInfo(id=id, label=name)
-                        for id, name in sequence.hand_id2name.items()
+                        rr.AnnotationInfo(id=id, label=name) for id, name in sequence.hand_id2name.items()
                     ],
                     keypoint_connections=sequence.hand_links,
                 ),
                 rr.ClassDescription(
                     info=rr.AnnotationInfo(id=1, label="Right Hand", color=(0, 0, 255)),
                     keypoint_annotations=[
-                        rr.AnnotationInfo(id=id, label=name)
-                        for id, name in sequence.hand_id2name.items()
+                        rr.AnnotationInfo(id=id, label=name) for id, name in sequence.hand_id2name.items()
                     ],
                     keypoint_connections=sequence.hand_links,
                 ),
@@ -86,16 +84,10 @@ def visualize_exo_ego(config: VisualzeConfig):
 
     exo_video_readers: MultiVideoReader = sequence.exo_video_readers
     exo_video_files: list[Path] = exo_video_readers.video_paths
-    exo_cam_log_paths: list[Path] = [
-        parent_log_path / exo_cam.name for exo_cam in sequence.exo_cam_list
-    ]
-    exo_video_log_paths: list[Path] = [
-        cam_log_paths / "pinhole" / "video" for cam_log_paths in exo_cam_log_paths
-    ]
+    exo_cam_log_paths: list[Path] = [parent_log_path / exo_cam.name for exo_cam in sequence.exo_cam_list]
+    exo_video_log_paths: list[Path] = [cam_log_paths / "pinhole" / "video" for cam_log_paths in exo_cam_log_paths]
 
-    blueprint: rrb.Blueprint = create_blueprint(
-        exo_video_log_paths, num_videos_to_log=config.num_videos_to_log
-    )
+    blueprint: rrb.Blueprint = create_blueprint(exo_video_log_paths, num_videos_to_log=config.num_videos_to_log)
     rr.send_blueprint(blueprint)
 
     # log stationary exo cameras and video assets
@@ -110,9 +102,7 @@ def visualize_exo_ego(config: VisualzeConfig):
         )
 
     all_timestamps: list[Int[ndarray, "num_frames"]] = []  # noqa: UP037
-    for video_file, video_log_path in zip(
-        exo_video_files, exo_video_log_paths, strict=True
-    ):
+    for video_file, video_log_path in zip(exo_video_files, exo_video_log_paths, strict=True):
         assert video_file.suffix == ".mp4", f"Video file {video_file} is not an mp4."
         # Log video asset which is referred to by frame references.
         frame_timestamps_ns: Int[ndarray, "num_frames"] = log_video(  # noqa: UP037
@@ -133,9 +123,10 @@ def visualize_exo_ego(config: VisualzeConfig):
         timeline=timeline,
         log_depth=config.log_depths,
     )
-    log_mano_batch(
-        sequence,
-        shortest_timestamp=shortest_timestamp,
-        timeline=timeline,
-    )
+    if sequence.exo_batch_data.mano_stack:
+        log_mano_batch(
+            sequence,
+            shortest_timestamp=shortest_timestamp,
+            timeline=timeline,
+        )
     print(f"Time taken to load data: {timer() - start_time:.2f} seconds")
