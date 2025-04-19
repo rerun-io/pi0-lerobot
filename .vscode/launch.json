@@ -5,12 +5,21 @@
     "version": "0.2.0",
     "configurations": [
         {
+            "name": "Hocap Visualize",
+            "type": "debugpy",
+            "request": "launch",
+            "program": "${workspaceFolder}/tools/view_exo_ego.py",
+            "console": "integratedTerminal",
+            "justMyCode": false,
+            "args": [] // Add any arguments here if needed
+        },
+        {
             "name": "Python Debugger: person_3d_detection",
             "type": "debugpy",
             "request": "launch",
             "program": "${workspaceFolder}/tools/person_3d_detection.py",
             "console": "integratedTerminal",
             "args": [] // Add any arguments here if needed
-        }
+        },
     ]
 }

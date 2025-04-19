@@ -3,16 +3,20 @@ from typing import Literal
 
 import numpy as np
 import torch
-from manopth.manolayer import ManoLayer
+from einops import rearrange
+from jaxtyping import Float32, Int64
+
+# from manopth.manolayer import ManoLayer
+from torch import Tensor
 from torch.nn import Module
+
+from pi0_lerobot.manopt_manolayer import ManoLayer as NewManoLayer
 
 
 class MANOLayer(Module):
     """Wrapper layer for manopth ManoLayer."""
 
-    def __init__(
-        self, side: Literal["left", "right"], betas: np.ndarray, mano_root_dir: Path
-    ):
+    def __init__(self, side: Literal["left", "right"], betas: Float32[np.ndarray, "10"], mano_root_dir: Path) -> None:
         """
         Constructor for MANOLayer.
 
@@ -25,10 +29,10 @@ class MANOLayer(Module):
         assert mano_root_dir.exists(), f"MANO root directory {mano_root_dir} not found."
         assert mano_root_dir.is_dir(), f"{mano_root_dir} is not a directory."
 
-        self._side = side
-        self._betas = betas
+        self._side: Literal["left", "right"] = side
+        self._betas: Float32[np.ndarray, "10"] = betas  # noqa: UP037
 
-        self._mano_layer = ManoLayer(
+        self._mano_layer = NewManoLayer(
             side=side,
             mano_root=mano_root_dir,
             flat_hand_mean=False,
@@ -36,57 +40,63 @@ class MANOLayer(Module):
             use_pca=True,
         )
 
-        # Register buffer for betas
-        b = torch.from_numpy(betas).unsqueeze(0).float()
+        # Register buffer for betas (prescanned for particular subject hand)
+        b: Float32[Tensor, "1 10"] = torch.from_numpy(rearrange(betas, "b -> 1 b")).float()
         self.register_buffer("b", b)
 
         # Register buffer for faces
-        self.register_buffer("f", self._mano_layer.th_faces)
+        f: Int64[Tensor, "num_faces=1538 3"] = self._mano_layer.th_faces
+        self.register_buffer("f", f)
 
         # Register buffer for root translation
-        v = (
-            torch.matmul(self._mano_layer.th_shapedirs, self.b.transpose(0, 1)).permute(
-                2, 0, 1
-            )
-            + self._mano_layer.th_v_template
-        )
-        r = torch.matmul(self._mano_layer.th_J_regressor[0], v)
+        shapedirs: Float32[Tensor, "778 3 10"] = self._mano_layer.th_shapedirs
+        v_template: Float32[Tensor, "b=1 num_verts=778 dim=3"] = self._mano_layer.th_v_template
+        # [778 3 10] @ [1 10].T -> [778 3 1]
+        v: Float32[Tensor, "n_verts=778 dim=3 b=1"] = shapedirs @ self.b.transpose(0, 1)
+        v: Float32[Tensor, "b=1 n_verts=778 dim=3"] = rearrange(v, "n_verts dim b -> b n_verts dim") + v_template
+
+        j_regressor: Float32[Tensor, "16 778"] = self._mano_layer.th_J_regressor
+        # [1 3 778] @ [1 778 3] -> [b 3 3]
+        r: Float32[Tensor, "1 3"] = j_regressor[0] @ v
         self.register_buffer("root_trans", r)
 
     def forward(
-        self, p: torch.Tensor, t: torch.Tensor
-    ) -> tuple[torch.Tensor, torch.Tensor]:
+        self, p: Float32[Tensor, "b n_poses=48"], t: Float32[Tensor, "b dim=3"]
+    ) -> tuple[Float32[Tensor, "b n_verts=778 dim=3"], Float32[Tensor, "b n_joints=21 dim=3"]]:
         """
         Forward function.
 
         Args:
-            p (torch.Tensor): A tensor of shape [B, 48] containing the pose.
-            t (torch.Tensor): A tensor of shape [B, 3] containing the translation.
+            p (Tensor): A tensor of shape [B, 48] containing the pose.
+            t (Tensor): A tensor of shape [B, 3] containing the translation.
 
         Returns:
-            tuple[torch.Tensor, torch.Tensor]:
+            tuple[Tensor, Tensor]:
                 v: A tensor of shape [B, 778, 3] containing the vertices.
                 j: A tensor of shape [B, 21, 3] containing the joints.
         """
-        v, j = self._mano_layer(p, self.b.expand(p.size(0), -1), t)
+        batch_size: int = p.size(0)
+        mano_output: tuple[Float32[Tensor, "b n_verts=778 dim=3"], Float32[Tensor, "b n_joints=21 dim=3"]] = (
+            self._mano_layer(p, self.b.expand(batch_size, -1), t)
+        )
 
         # Convert to meters.
-        v /= 1000.0
-        j /= 1000.0
-        return v, j
+        verts: Float32[Tensor, "b n_verts=778 dim=3"] = mano_output[0] / 1000.0
+        joints: Float32[Tensor, "b n_joints=21 dim=3"] = mano_output[1] / 1000.0
+        return verts, joints
 
     @property
-    def th_hands_mean(self) -> torch.Tensor:
+    def th_hands_mean(self) -> Tensor:
         """Return the hand mean tensor."""
         return self._mano_layer.th_hands_mean
 
     @property
-    def th_selected_comps(self) -> torch.Tensor:
+    def th_selected_comps(self) -> Tensor:
         """Return the selected components tensor."""
         return self._mano_layer.th_selected_comps
 
     @property
-    def th_v_template(self) -> torch.Tensor:
+    def th_v_template(self) -> Tensor:
         """Return the vertex template tensor."""
         return self._mano_layer.th_v_template
 

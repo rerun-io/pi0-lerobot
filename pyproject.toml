@@ -8,7 +8,9 @@ dependencies = [
     "tensordict>=0.7.0,<0.8",
     "wadler-lindig>=0.1.3,<0.2",
     "onnxruntime-gpu>=1.20.1,<2",
-    "ipython-beartype>=0.1.0,<0.2", "lovely-numpy>=0.2.13,<0.3",
+    "ipython-beartype>=0.1.0,<0.2",
+    "lovely-numpy>=0.2.13,<0.3",
+    "lovely-tensors>=0.1.18,<0.2",
 ]
 
 [build-system]
@@ -39,7 +41,7 @@ rtmlib = { git = "https://github.com/pablovela5620/rtmlib.git" }
 torch = { version = ">=2.5.1", index = "https://download.pytorch.org/whl/cu124" }
 torchvision = { version = ">=0.20.1", index = "https://download.pytorch.org/whl/cu124" }
 torchcodec = { version = ">=0.2.1", index = "https://download.pytorch.org/whl/cu124" }
-manopth = { git = "https://github.com/gobanana520/manopth.git" }
+# manopth = { git = "https://github.com/gobanana520/manopth.git" }
 vggt = { git = "https://github.com/facebookresearch/vggt.git", rev = "f8bf73ac25d5089cca2d6540a185697087fa2255" }
 
 # gradio-rerun = { url = "https://huggingface.co/datasets/pablovela5620/gradio-rr-wheels/resolve/main/gradio_rerun-0.0.11-py3-none-any.whl" }
@@ -99,7 +101,7 @@ cmd = """
     )
     """
 outputs = ["data/hocap/sample.zip", "data/hocap/sample"]
-depends-on = ["_install-chumpy"]
+# depends-on = ["_install-chumpy"]
 description = "Downloads and extracts an example polycam dataset from huggingface, this may take a while"
 
 [tool.pixi.tasks.visualize-hocap-dataset]
