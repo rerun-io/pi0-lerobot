@@ -12,7 +12,7 @@ from serde.pickle import from_pickle
 from torch import Tensor
 from torch.nn import Module
 
-from pi0_lerobot import rot6d, rotproj
+from pi0_lerobot.mano import rot6d, rotproj
 
 
 def quat2mat(quat):

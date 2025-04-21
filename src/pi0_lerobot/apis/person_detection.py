@@ -11,7 +11,7 @@ from numpy import ndarray
 from simplecv.apis.view_exoego_data import log_exo_ego_sequence_batch
 from simplecv.camera_parameters import PinholeParameters
 from simplecv.data.exoego.assembly_101 import Assembely101Sequence
-from simplecv.data.exoego.base_exo_ego import BaseExoEgoSequence, ExoBatchData, ExoData
+from simplecv.data.exoego.base_exo_ego import BaseExoEgoSequence
 from simplecv.data.exoego.hocap import HOCapSequence, SubjectIDs
 from simplecv.ops.triangulate import projectN3
 from simplecv.rerun_log_utils import RerunTyroConfig, log_pinhole, log_video
@@ -24,8 +24,8 @@ from pi0_lerobot.multiview_pose_estimator import (
     MultiviewBodyTracker,
     MVOutput,
 )
-from pi0_lerobot.rerun_log_utils import create_blueprint
-from pi0_lerobot.skeletons.coco_17 import COCO_17_IDS, COCO_ID2NAME, COCO_LINKS
+from pi0_lerobot.rerun_log_utils import create_blueprint, set_pose_annotation_context
+from pi0_lerobot.skeletons.coco_17 import COCO_17_IDS
 
 np.set_printoptions(suppress=True)
 
@@ -41,56 +41,6 @@ class VisualzeConfig:
     log_depths: bool = False
     log_extrapolated_keypoints: bool = False
     send_as_batch: bool = True
-
-
-def set_pose_annotation_context(sequence: BaseExoEgoSequence) -> None:
-    rr.log(
-        "/",
-        rr.AnnotationContext(
-            [
-                rr.ClassDescription(
-                    info=rr.AnnotationInfo(id=0, label="Left Hand", color=(0, 0, 255)),
-                    keypoint_annotations=[
-                        rr.AnnotationInfo(id=id, label=name) for id, name in sequence.hand_id2name.items()
-                    ],
-                    keypoint_connections=sequence.hand_links,
-                ),
-                rr.ClassDescription(
-                    info=rr.AnnotationInfo(id=1, label="Right Hand", color=(0, 0, 255)),
-                    keypoint_annotations=[
-                        rr.AnnotationInfo(id=id, label=name) for id, name in sequence.hand_id2name.items()
-                    ],
-                    keypoint_connections=sequence.hand_links,
-                ),
-                rr.ClassDescription(
-                    info=rr.AnnotationInfo(id=2, label="Triangulate", color=(0, 255, 255)),
-                    keypoint_annotations=[rr.AnnotationInfo(id=id, label=name) for id, name in COCO_ID2NAME.items()],
-                    keypoint_connections=COCO_LINKS,
-                ),
-                rr.ClassDescription(
-                    info=rr.AnnotationInfo(id=3, label="Body", color=(0, 0, 255)),
-                    keypoint_annotations=[rr.AnnotationInfo(id=id, label=name) for id, name in COCO_ID2NAME.items()],
-                    keypoint_connections=COCO_LINKS,
-                ),
-                rr.ClassDescription(
-                    info=rr.AnnotationInfo(id=4, label="extrap"),
-                    keypoint_annotations=[rr.AnnotationInfo(id=id, label=name) for id, name in COCO_ID2NAME.items()],
-                    keypoint_connections=COCO_LINKS,
-                ),
-                rr.ClassDescription(
-                    info=rr.AnnotationInfo(id=5, label="t1"),
-                    keypoint_annotations=[rr.AnnotationInfo(id=id, label=name) for id, name in COCO_ID2NAME.items()],
-                    keypoint_connections=COCO_LINKS,
-                ),
-                rr.ClassDescription(
-                    info=rr.AnnotationInfo(id=6, label="t2"),
-                    keypoint_annotations=[rr.AnnotationInfo(id=id, label=name) for id, name in COCO_ID2NAME.items()],
-                    keypoint_connections=COCO_LINKS,
-                ),
-            ]
-        ),
-        static=True,
-    )
 
 
 def run_person_detection(config: VisualzeConfig):

@@ -10,12 +10,61 @@ from numpy import ndarray
 from simplecv.data.exoego.base_exo_ego import BaseExoEgoSequence
 from tqdm import tqdm
 
-from pi0_lerobot.mano_utils import MANOLayer
+from pi0_lerobot.mano.mano_utils import MANOLayer
+from pi0_lerobot.skeletons.coco_17 import COCO_ID2NAME, COCO_LINKS
 
 
-def create_blueprint(
-    exo_video_log_paths: list[Path], num_videos_to_log: Literal[4, 8] = 8
-) -> rrb.Blueprint:
+def set_pose_annotation_context(sequence: BaseExoEgoSequence) -> None:
+    rr.log(
+        "/",
+        rr.AnnotationContext(
+            [
+                rr.ClassDescription(
+                    info=rr.AnnotationInfo(id=0, label="Left Hand", color=(0, 0, 255)),
+                    keypoint_annotations=[
+                        rr.AnnotationInfo(id=id, label=name) for id, name in sequence.hand_id2name.items()
+                    ],
+                    keypoint_connections=sequence.hand_links,
+                ),
+                rr.ClassDescription(
+                    info=rr.AnnotationInfo(id=1, label="Right Hand", color=(0, 0, 255)),
+                    keypoint_annotations=[
+                        rr.AnnotationInfo(id=id, label=name) for id, name in sequence.hand_id2name.items()
+                    ],
+                    keypoint_connections=sequence.hand_links,
+                ),
+                rr.ClassDescription(
+                    info=rr.AnnotationInfo(id=2, label="Triangulate", color=(0, 255, 255)),
+                    keypoint_annotations=[rr.AnnotationInfo(id=id, label=name) for id, name in COCO_ID2NAME.items()],
+                    keypoint_connections=COCO_LINKS,
+                ),
+                rr.ClassDescription(
+                    info=rr.AnnotationInfo(id=3, label="Body", color=(0, 0, 255)),
+                    keypoint_annotations=[rr.AnnotationInfo(id=id, label=name) for id, name in COCO_ID2NAME.items()],
+                    keypoint_connections=COCO_LINKS,
+                ),
+                rr.ClassDescription(
+                    info=rr.AnnotationInfo(id=4, label="extrap"),
+                    keypoint_annotations=[rr.AnnotationInfo(id=id, label=name) for id, name in COCO_ID2NAME.items()],
+                    keypoint_connections=COCO_LINKS,
+                ),
+                rr.ClassDescription(
+                    info=rr.AnnotationInfo(id=5, label="t1"),
+                    keypoint_annotations=[rr.AnnotationInfo(id=id, label=name) for id, name in COCO_ID2NAME.items()],
+                    keypoint_connections=COCO_LINKS,
+                ),
+                rr.ClassDescription(
+                    info=rr.AnnotationInfo(id=6, label="t2"),
+                    keypoint_annotations=[rr.AnnotationInfo(id=id, label=name) for id, name in COCO_ID2NAME.items()],
+                    keypoint_connections=COCO_LINKS,
+                ),
+            ]
+        ),
+        static=True,
+    )
+
+
+def create_blueprint(exo_video_log_paths: list[Path], num_videos_to_log: Literal[4, 8] = 8) -> rrb.Blueprint:
     active_tab: int = 0  # 0 for video, 1 for images
     main_view = rrb.Vertical(
         contents=[
@@ -78,9 +127,7 @@ def log_mano_batch(
     shortest_timestamp: Int[ndarray, "num_frames"],
     timeline: str,
 ) -> None:
-    mano_poses: Float32[torch.Tensor, "num_frames 2 51"] = torch.from_numpy(
-        sequence.exo_batch_data.mano_stack.poses
-    )
+    mano_poses: Float32[torch.Tensor, "num_frames 2 51"] = torch.from_numpy(sequence.exo_batch_data.mano_stack.poses)
 
     # order is important here
     hand_sides: list[str] = ["right", "left"]
@@ -107,9 +154,7 @@ def log_mano_batch(
 
     for hand_idx, (hand_side, mano_layer) in pbar:
         poses: Float32[torch.Tensor, "num_frames 48"] = mano_poses[:, hand_idx, :48]
-        translations: Float32[torch.Tensor, "num_frames 3"] = mano_poses[
-            :, hand_idx, 48:51
-        ]
+        translations: Float32[torch.Tensor, "num_frames 3"] = mano_poses[:, hand_idx, 48:51]
         mano_outputs: tuple[
             Float32[torch.Tensor, "num_frames 778 3"],
             Float32[torch.Tensor, "num_frames 21 3"],
@@ -128,9 +173,7 @@ def log_mano_batch(
 
         rr.send_columns(
             f"mano_{mano_layer.side}",
-            indexes=[
-                rr.TimeNanosColumn(timeline, shortest_timestamp[0 : len(sequence)])
-            ],
+            indexes=[rr.TimeNanosColumn(timeline, shortest_timestamp[0 : len(sequence)])],
             columns=[
                 *rr.Points3D.columns(
                     positions=rearrange(

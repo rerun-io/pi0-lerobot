@@ -10,7 +10,7 @@ dependencies = [
     "onnxruntime-gpu>=1.20.1,<2",
     "ipython-beartype>=0.1.0,<0.2",
     "lovely-numpy>=0.2.13,<0.3",
-    "lovely-tensors>=0.1.18,<0.2",
+    "lovely-tensors>=0.1.18,<0.2", "jax>=0.6.0,<0.7", "jaxopt>=0.8.5,<0.9",
 ]
 
 [build-system]

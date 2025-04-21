@@ -5,12 +5,10 @@ import numpy as np
 import torch
 from einops import rearrange
 from jaxtyping import Float32, Int64
-
-# from manopth.manolayer import ManoLayer
 from torch import Tensor
 from torch.nn import Module
 
-from pi0_lerobot.manopt_manolayer import ManoLayer as NewManoLayer
+from pi0_lerobot.mano.manopt_manolayer import ManoLayer
 
 
 class MANOLayer(Module):
@@ -32,7 +30,7 @@ class MANOLayer(Module):
         self._side: Literal["left", "right"] = side
         self._betas: Float32[np.ndarray, "10"] = betas  # noqa: UP037
 
-        self._mano_layer = NewManoLayer(
+        self._mano_layer = ManoLayer(
             side=side,
             mano_root=mano_root_dir,
             flat_hand_mean=False,
