@@ -1,11 +1,10 @@
 from dataclasses import dataclass
-from typing import Any, Literal, TypedDict
+from typing import Literal, TypedDict
 
 import jax
 import jax.numpy as npj
 import numpy as np
 from jax import jit
-from jax.debug import print as jprint
 from jaxopt import LevenbergMarquardt
 from jaxopt._src.levenberg_marquardt import LevenbergMarquardtState
 from jaxtyping import Array, Float

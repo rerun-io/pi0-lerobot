@@ -72,7 +72,7 @@ class JointsOnly:
         batch 3, 16 -> batch 48
         batch 3*48 -> batch 144 because its a 3x3 matrix so an extra 3 gets multipled
         """
-        num_joints = int(pose_vectors.shape[1] / 3)
+        num_joints: int = int(pose_vectors.shape[1] / 3)
         # merge batch dimension and num_joints dimension (so batch 10 num joints 16 -> 160)
         pose_vec_reshaped = pose_vectors.reshape(-1, 3)
         rot_mats = self._batch_rodrigues(pose_vec_reshaped)

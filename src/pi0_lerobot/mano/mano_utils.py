@@ -8,7 +8,7 @@ from jaxtyping import Float32, Int64
 from torch import Tensor
 from torch.nn import Module
 
-from pi0_lerobot.mano.manopt_manolayer import ManoLayer
+from pi0_lerobot.mano.mano_pytorch_simple import ManoSimpleLayer
 
 
 class MANOLayer(Module):
@@ -30,10 +30,9 @@ class MANOLayer(Module):
         self._side: Literal["left", "right"] = side
         self._betas: Float32[np.ndarray, "10"] = betas  # noqa: UP037
 
-        self._mano_layer = ManoLayer(
+        self._mano_layer = ManoSimpleLayer(
             side=side,
             mano_root=mano_root_dir,
-            flat_hand_mean=False,
             ncomps=45,
             use_pca=True,
         )

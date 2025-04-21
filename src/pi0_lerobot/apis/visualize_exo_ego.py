@@ -128,5 +128,6 @@ def visualize_exo_ego(config: VisualzeConfig):
             sequence,
             shortest_timestamp=shortest_timestamp,
             timeline=timeline,
+            mano_root_dir=Path("data/mano_clean"),
         )
     print(f"Time taken to load data: {timer() - start_time:.2f} seconds")
