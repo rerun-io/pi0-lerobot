@@ -126,6 +126,7 @@ def log_mano_batch(
     sequence: BaseExoEgoSequence,
     shortest_timestamp: Int[ndarray, "num_frames"],
     timeline: str,
+    mano_root_dir: Path,
 ) -> None:
     mano_poses: Float32[torch.Tensor, "num_frames 2 51"] = torch.from_numpy(sequence.exo_batch_data.mano_stack.poses)
 
@@ -135,7 +136,7 @@ def log_mano_batch(
         MANOLayer(
             side=side,
             betas=sequence.exo_batch_data.mano_stack.betas,
-            mano_root_dir=Path("data/mano_models/mano_v1_2/models"),
+            mano_root_dir=mano_root_dir,
         )
         for side in hand_sides
     ]
