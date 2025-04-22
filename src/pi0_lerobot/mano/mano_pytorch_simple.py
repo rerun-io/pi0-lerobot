@@ -238,7 +238,7 @@ class ManoSimpleLayer(Module):
         th_full_pose: Float[Tensor, "b betas=48"] = torch.cat(
             [th_pose_coeffs[:, :3], self.th_hands_mean + th_full_hand_pose], 1
         )
-        # th_full_pose: Float[Tensor, "b betas=48"] = th_pose_coeffs
+
         # compute rotation matrixes from axis-angle while skipping global rotation (16*9 = 144)
         th_rot_map: Float[Tensor, "b n_rotmat_flat=144"] = th_posemap_axisang(th_full_pose)  # used to pose verts
         th_pose_map: Float[Tensor, "b n_rotmat_flat=144"] = subtract_flat_id(th_rot_map)  # used to pose joints
@@ -331,12 +331,13 @@ class ManoSimpleLayer(Module):
         # [b 4 4 16] @ [778 16].T -> [b 4 4 16] @ [16 778] = [b 4 4 778]
         th_T: Float[Tensor, "b 4 4 n_verts=778"] = th_results2 @ self.th_weights.transpose(0, 1)
 
+        # convert to homogeneous coordinates
         th_rest_shape_h: Float[Tensor, "b 4 n_verts=778"] = torch.cat(
             [
                 th_v_posed.transpose(2, 1),
                 torch.ones((batch_size, 1, th_v_posed.shape[1]), dtype=th_T.dtype, device=th_T.device),
             ],
-            1,
+            dim=1,
         )
 
         th_rest_shape_h: Float[Tensor, "b 1 4 n_verts=778"] = rearrange(th_rest_shape_h, "b m n_verts -> b 1 m n_verts")
@@ -357,8 +358,8 @@ class ManoSimpleLayer(Module):
         ]
 
         # pose in global coordinates
-        th_jtr: Float[Tensor, "b joints_and_tips=21 3"] = th_jtr + th_trans.unsqueeze(1)
-        th_verts: Float[Tensor, "b n_verts=778 3"] = th_verts + th_trans.unsqueeze(1)
+        th_jtr: Float[Tensor, "b joints_and_tips=21 3"] = th_jtr + rearrange(th_trans, "b dim -> b 1 dim")
+        th_verts: Float[Tensor, "b n_verts=778 3"] = th_verts + rearrange(th_trans, "b dim -> b 1 dim")
 
         # Scale to milimeters
         th_verts: Float[Tensor, "b n_verts=778 3"] = th_verts * 1000
