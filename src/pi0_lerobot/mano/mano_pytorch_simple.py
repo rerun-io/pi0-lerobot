@@ -147,26 +147,50 @@ class ManoSimpleLayer(Module):
         side: Literal["left", "right"] = "right",
         mano_root: Path = "mano/models",
         use_pca: bool = True,
-        joint_rot_mode: Literal["axisang"] = "axisang",
     ) -> None:
-        """
-        A simplified version of the MANO layer for understanding and debugging. This should NOT be used in a training pipeline.
+        """Initializes the ManoSimpleLayer.
 
-        Args:
-            center_idx: index of center joint in our computations,
-                if -1 centers on estimate of palm as middle of base
-                of middle finger and wrist
-            mano_root: path to MANO pkl files for left and right hand
-            ncomps: number of PCA components form pose space - for simple case will always be 45
-            side: 'right' or 'left'
-            use_pca: Use PCA decomposition for pose space.
-            joint_rot_mode: 'axisang' or 'rotmat', ignored if use_pca
+        This layer provides a simplified, non-trainable implementation of the MANO hand model,
+        primarily intended for understanding, visualization, and debugging purposes. It loads
+        pre-defined MANO model parameters from a .pkl file.
+
+        Note:
+            This layer is NOT designed for use within a training pipeline due to its
+            simplified nature and lack of gradient tracking for some operations.
+
+            ncomps: The number of principal components (PCA) to use for the pose
+                representation. Currently fixed at 45 for this simplified version.
+                Defaults to 45.
+            side: Specifies whether to load the 'left' or 'right' hand model.
+                Defaults to "right".
+            mano_root: The directory path containing the MANO model .pkl files
+                (e.g., MANO_LEFT.pkl, MANO_RIGHT.pkl). Defaults to "mano/models".
+            use_pca: Determines whether to use the PCA representation for hand pose.
+                If False, raw joint rotations (axis-angle) are expected. Defaults to True.
+
+
+        Attributes:
+            side (Literal["left", "right"]): The side of the hand model loaded.
+            use_pca (bool): Flag indicating if PCA pose representation is used.
+            joint_rot_mode (Literal["axisang"]): Joint rotation mode (ignored if use_pca is True).
+            ncomps (int): Number of PCA components (fixed at 45).
+            mano_path (Path): Full path to the loaded MANO .pkl file.
+            th_shapedirs (Tensor): Tensor containing shape blend shapes. Shape: (778, 3, 10).
+            th_posedirs (Tensor): Tensor containing pose blend shapes. Shape: (778, 3, 135).
+            th_v_template (Tensor): Template vertices of the hand model. Shape: (1, 778, 3).
+            th_J_regressor (Tensor): Regressor matrix to compute joint locations from vertices. Shape: (16, 778).
+            th_weights (Tensor): Linear blend skinning weights. Shape: (778, 16).
+            th_faces (Tensor): Triangle face indices for the mesh. Shape: (1538, 3).
+            n_verts (int): Number of vertices in the hand model (778).
+            th_hands_mean (Tensor): Mean pose in PCA space. Shape: (1, 45).
+            th_comps (Tensor): PCA components for pose. Shape: (45, 45).
+            kintree_table (ndarray): Kinematic tree structure defining parent-child joint relationships. Shape: (2, 16).
+            kintree_parents (list[int]): List mapping each joint to its parent joint index.
         """
         super().__init__()
 
         self.side: Literal["left", "right"] = side
         self.use_pca: bool = use_pca
-        self.joint_rot_mode: Literal["axisang", "rotmat"] = joint_rot_mode
         self.ncomps = ncomps
 
         self.mano_path: Path = mano_root / f"MANO_{side.upper()}.pkl"
@@ -178,17 +202,24 @@ class ManoSimpleLayer(Module):
 
         hands_components: Float64[ndarray, "45 45"] = mano_data.hands_components
 
-        # Store MANO data directly as attributes with type hints
+        # Shape‑blend basis: vertex offsets per β‑shape coefficient
         self.th_shapedirs: Float[Tensor, "n_verts=778 dim=3 n_betas=10"] = torch.Tensor(mano_data.shapedirs)
+        # Pose‑blend basis: pose‑dependent wrinkle/volume corrections
         self.th_posedirs: Float[Tensor, "n_verts=778 dim=3 n_pose_dims=135"] = torch.Tensor(mano_data.posedirs)
+        # Neutral/rest‑pose mesh in metres (unsqueezed for fake batch dim)
         self.th_v_template: Float[Tensor, "1 n_verts=778 dim=3"] = torch.Tensor(mano_data.v_template).unsqueeze(0)
+        # Linear regressor V → J: gives 16 skeletal joint centres
         self.th_J_regressor: Float[Tensor, "n_joints=16 n_verts=778"] = torch.Tensor(mano_data.J_regressor)
+        # Skinning weights (rows sum to 1): influence of each joint on each vertex
         self.th_weights: Float[Tensor, "n_verts=778 n_joints=16"] = torch.Tensor(mano_data.weights)
+        # Triangle indices for rendering/export (int32 → int64 for PyTorch)
         self.th_faces: Int64[Tensor, "n_faces=1538 3"] = torch.Tensor(mano_data.f.astype(np.int32)).long()
+        # Convenience alias for vertex count (778)
         self.n_verts: int = self.th_v_template.shape[1]
 
         # Get hand mean
         self.th_hands_mean: Float[Tensor, "1 45"] = torch.Tensor(mano_data.hands_mean).unsqueeze(0)
+        # PCA basis for hand pose
         self.th_comps: Float[Tensor, "45 45"] = torch.Tensor(hands_components)
 
         # Kinematic chain params
