@@ -227,7 +227,9 @@ class ManoSimpleLayer(Module):
 
         batch_size: int = th_pose_coeffs.shape[0]
 
-        # Get axis angle from PCA components and coefficients
+        ###############################################################
+        # Step 1: Get axis-angle from PCA components and coefficients #
+        ###############################################################
         # Remove global rot coeffs (45 = 15*3)
         th_hand_pose_coeffs: Float[Tensor, "b betas=45"] = th_pose_coeffs[:, 3 : 3 + 45]
         # PCA components --> axis angles if use_pca is True
@@ -239,6 +241,11 @@ class ManoSimpleLayer(Module):
             [th_pose_coeffs[:, :3], self.th_hands_mean + th_full_hand_pose], 1
         )
 
+        # ------------------------------------------------------------------
+        # Step 2: Get rotation matricies and pose maps from axis-angle
+        # pose maps are relative to the current rotation so zero when in rest pose
+        # ------------------------------------------------------------------
+
         # compute rotation matrixes from axis-angle while skipping global rotation (16*9 = 144)
         th_rot_map: Float[Tensor, "b n_rotmat_flat=144"] = th_posemap_axisang(th_full_pose)  # used to pose verts
         th_pose_map: Float[Tensor, "b n_rotmat_flat=144"] = subtract_flat_id(th_rot_map)  # used to pose joints
@@ -247,13 +254,26 @@ class ManoSimpleLayer(Module):
         th_rot_map: Float[Tensor, "b 135"] = th_rot_map[:, 9:]
         th_pose_map: Float[Tensor, "b 135"] = th_pose_map[:, 9:]
 
+        # ------------------------------------------------------------------
+        # Step 3 – Shape blend: betas deform the template geometry
+        # ------------------------------------------------------------------
+
         # [778, 3, 10] @ [b, 10].T -> [778, 3, 10] @ [10, b] = [778, 3, b]
         th_v_shaped: Float[Tensor, "n_verts=778 dim=3 b "] = self.th_shapedirs @ th_betas.transpose(1, 0)
         th_v_shaped: Float[Tensor, "b n_verts=778 dim=3 "] = (
             rearrange(th_v_shaped, "n_verts dim b -> b n_verts dim") + self.th_v_template
         )
+
+        # ------------------------------------------------------------------
+        # Step 4 – Regress nominal joint locations (still in rest pose)
+        # ------------------------------------------------------------------
+
         # [16 778] @ [b, 778, 3] -> [b, 16, 3]
         th_j: Float[Tensor, "b n_joints=16 dim=3"] = self.th_J_regressor @ th_v_shaped
+
+        # ------------------------------------------------------------------
+        # Step 5 – Pose‑dependent corrective offsets (wrinkles, volume)
+        # ------------------------------------------------------------------
 
         # [778 3 135] @ [b 135].T -> [778 3 135] @ [135 b] = [778 3 b]
         th_pose_map: Float[Tensor, "n_verts=778 dim=3 b"] = self.th_posedirs @ th_pose_map.transpose(0, 1)
@@ -262,8 +282,10 @@ class ManoSimpleLayer(Module):
         )
         # Final T pose with transformation done !
 
-        # Global rigid transformation
-        # extract root joint
+        # ------------------------------------------------------------------
+        # Step 6 – Forward kinematics: build SE(3) for each joint
+        # ------------------------------------------------------------------
+
         root_j: Float[Tensor, "b dim=3 1"] = th_j[:, 0, :].contiguous().view(batch_size, 3, 1)
         # trans here refers to transformation matrix
         root_trans: Float[Tensor, "b 4 4"] = th_with_zeros(torch.cat([root_rot, root_j], 2))
@@ -316,6 +338,10 @@ class ManoSimpleLayer(Module):
         th_results: Float[Tensor, "b n_joints=16 4 4"] = torch.cat(all_transforms, 1)[:, reorder_idxs]
         th_results_global: Float[Tensor, "b n_joints=16 4 4"] = th_results
 
+        # ------------------------------------------------------------------
+        # Step 7 – Linear Blend Skinning (core of LBS)
+        # ------------------------------------------------------------------
+
         # perform linear blend skinning to get verts
         joint_js: Float[Tensor, "b n_joints=16 4"] = torch.cat([th_j, th_j.new_zeros(batch_size, 16, 1)], 2)
         # [b 16 4 4] @ [b 16 4 1] -> [b 16 4 4] @ [b 16 4 1] -> [b 16 4 1]
@@ -346,22 +372,31 @@ class ManoSimpleLayer(Module):
         th_verts: Float[Tensor, "b n_verts=778 4"] = th_verts.transpose(2, 1)
         th_verts: Float[Tensor, "b n_verts=778 3"] = th_verts[:, :, :3]
 
+        # ------------------------------------------------------------------
+        # Step 8 – Add fingertip pseudo‑joints
+        # ------------------------------------------------------------------
         th_jtr: Float[Tensor, "b n_joints=16 3"] = th_results_global[:, :, :3, 3]
         # In addition to MANO reference joints we sample vertices on each finger
         # to serve as finger tips
         tips: Float[Tensor, "b 5 3"] = th_verts[:, [745, 319, 444, 556, 673]]
         th_jtr: Float[Tensor, "b joints_and_tips=21 3"] = torch.cat([th_jtr, tips], dim=1)
 
-        # Reorder joints to match visualization utilities
+        # ------------------------------------------------------------------
+        # Step 9 – Re‑order joints for downstream visualisers
+        # ------------------------------------------------------------------
         th_jtr: Float[Tensor, "b joints_and_tips=21 3"] = th_jtr[
             :, [0, 13, 14, 15, 16, 1, 2, 3, 17, 4, 5, 6, 18, 10, 11, 12, 19, 7, 8, 9, 20]
         ]
 
-        # pose in global coordinates
+        # ------------------------------------------------------------------
+        # Step 10 – Apply global translation
+        # ------------------------------------------------------------------
         th_jtr: Float[Tensor, "b joints_and_tips=21 3"] = th_jtr + rearrange(th_trans, "b dim -> b 1 dim")
         th_verts: Float[Tensor, "b n_verts=778 3"] = th_verts + rearrange(th_trans, "b dim -> b 1 dim")
 
-        # Scale to milimeters
+        # ------------------------------------------------------------------
+        # Step 11 – Convert from metres → millimetres
+        # ------------------------------------------------------------------
         th_verts: Float[Tensor, "b n_verts=778 3"] = th_verts * 1000
         th_jtr: Float[Tensor, "b joints_and_tips=21 3"] = th_jtr * 1000
 
