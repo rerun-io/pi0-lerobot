@@ -520,7 +520,7 @@ environments:
       - pypi: https://files.pythonhosted.org/packages/f5/e8/f6bd1eee09314e7e6dee49cbe2c5e22314ccdb38db16c9fc72d2fa80d054/docker_pycreds-0.4.0-py2.py3-none-any.whl
       - pypi: https://files.pythonhosted.org/packages/d5/7c/e9fcff7623954d86bdc17782036cbf715ecab1bec4847c008557affe1ca8/docstring_parser-0.16-py3-none-any.whl
       - pypi: https://files.pythonhosted.org/packages/0c/d5/c5db1ea3394c6e1732fb3286b3bd878b59507a8f77d32a2cebda7d7b7cd4/donfig-0.8.1.post1-py3-none-any.whl
-      - pypi: git+https://github.com/dlwh/draccus.git#7d7e5096139002bdc527dfa717c3debd19675866
+      - pypi: git+https://github.com/dlwh/draccus.git#7bed945e1c95bd6556fb115525a73598a49f48a0
       - pypi: https://files.pythonhosted.org/packages/87/62/9773de14fe6c45c23649e98b83231fffd7b9892b6cf863251dc2afa73643/einops-0.8.1-py3-none-any.whl
       - pypi: https://files.pythonhosted.org/packages/05/2c/ffc08c54c05cdce6fbed2aeebc46348dbe180c6d2c541c7af7ba0aa5f5f8/Farama_Notifications-0.0.4-py3-none-any.whl
       - pypi: https://files.pythonhosted.org/packages/b3/5d/4d8bbb94f0dbc22732350c06965e40740f4a92ca560e90bb566f4f73af41/fastapi-0.115.11-py3-none-any.whl
@@ -606,7 +606,7 @@ environments:
       - pypi: https://files.pythonhosted.org/packages/31/6e/baaf70bd9a881dd8c12cbccdd7ca0ff291024a37044a8245e942e12e7135/setproctitle-1.3.5-cp311-cp311-manylinux_2_5_x86_64.manylinux1_x86_64.manylinux_2_17_x86_64.manylinux2014_x86_64.whl
       - pypi: https://files.pythonhosted.org/packages/0b/a5/2c8dbb0f383519771df19164e3bf3a8895d195d2edeab4b6040f176ee28e/shapely-2.0.7-cp311-cp311-manylinux_2_17_x86_64.manylinux2014_x86_64.whl
       - pypi: https://files.pythonhosted.org/packages/e2/d1/a1d3189e7873408b9dc396aef0d7926c198b0df2aa3ddb5b539d3e89a70f/shtab-1.7.1-py3-none-any.whl
-      - pypi: git+https://github.com/pablovela5620/simplecv.git?rev=b2d52451ec5702f54ca6bcbf59ae39dccb189e8a#b2d52451ec5702f54ca6bcbf59ae39dccb189e8a
+      - pypi: git+https://github.com/pablovela5620/simplecv.git?rev=83ffa2f9e5b493c05a9dd0ffb2e31f28ed431fe9#83ffa2f9e5b493c05a9dd0ffb2e31f28ed431fe9
       - pypi: https://files.pythonhosted.org/packages/04/be/d09147ad1ec7934636ad912901c5fd7667e1c858e19d355237db0d0cd5e4/smmap-5.0.2-py3-none-any.whl
       - pypi: https://files.pythonhosted.org/packages/a0/4b/528ccf7a982216885a1ff4908e886b8fb5f19862d1962f56a3fce2435a70/starlette-0.46.1-py3-none-any.whl
       - pypi: https://files.pythonhosted.org/packages/b2/fe/81695a1aa331a842b582453b605175f419fe8540355886031328089d840a/sympy-1.13.1-py3-none-any.whl
@@ -2595,9 +2595,9 @@ packages:
   purls: []
   size: 69544
   timestamp: 1739569648873
-- pypi: git+https://github.com/dlwh/draccus.git#7d7e5096139002bdc527dfa717c3debd19675866
+- pypi: git+https://github.com/dlwh/draccus.git#7bed945e1c95bd6556fb115525a73598a49f48a0
   name: draccus
-  version: 0.10.0
+  version: 0.11.1
   requires_dist:
   - mergedeep~=1.3
   - pyyaml~=6.0
@@ -7068,7 +7068,7 @@ packages:
 - pypi: .
   name: pi0-lerobot
   version: 0.1.0
-  sha256: 27346b88716f5cd57393c8f4378eeac2edbe2d28598fc95b903a86e1e74041a1
+  sha256: e90ab2d7f6fe5d4dcf900cb505b41b82e8720293c25c7617319c42a652ddd9dd
   requires_dist:
   - tensordict>=0.7.0,<0.8
   - wadler-lindig>=0.1.3,<0.2
@@ -8177,7 +8177,7 @@ packages:
   - pytest-cov ; extra == 'dev'
   - pytest-timeout ; extra == 'dev'
   requires_python: '>=3.7'
-- pypi: git+https://github.com/pablovela5620/simplecv.git?rev=b2d52451ec5702f54ca6bcbf59ae39dccb189e8a#b2d52451ec5702f54ca6bcbf59ae39dccb189e8a
+- pypi: git+https://github.com/pablovela5620/simplecv.git?rev=83ffa2f9e5b493c05a9dd0ffb2e31f28ed431fe9#83ffa2f9e5b493c05a9dd0ffb2e31f28ed431fe9
   name: simplecv
   version: 0.3.1
   requires_dist:

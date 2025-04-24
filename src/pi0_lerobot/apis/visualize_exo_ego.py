@@ -9,7 +9,7 @@ import rerun.blueprint as rrb
 from jaxtyping import Int
 from numpy import ndarray
 from simplecv.apis.view_exoego_data import log_exo_ego_sequence_batch
-from simplecv.data.exoego.assembly_101 import Assembely101Sequence
+from simplecv.data.exoego.assembly_101 import Assembly101Sequence
 from simplecv.data.exoego.base_exo_ego import BaseExoEgoSequence
 from simplecv.data.exoego.hocap import HOCapSequence, SubjectIDs
 from simplecv.rerun_log_utils import RerunTyroConfig, log_pinhole, log_video
@@ -69,7 +69,7 @@ def visualize_exo_ego(config: VisualzeConfig):
                 load_labels=True,
             )
         case "assembly101":
-            sequence: Assembely101Sequence = Assembely101Sequence(
+            sequence: Assembly101Sequence = Assembly101Sequence(
                 data_path=config.root_directory,
                 sequence_name=config.sequence_name,
                 subject_id=None,

@@ -10,7 +10,9 @@ dependencies = [
     "onnxruntime-gpu>=1.20.1,<2",
     "ipython-beartype>=0.1.0,<0.2",
     "lovely-numpy>=0.2.13,<0.3",
-    "lovely-tensors>=0.1.18,<0.2", "jax>=0.6.0,<0.7", "jaxopt>=0.8.5,<0.9",
+    "lovely-tensors>=0.1.18,<0.2",
+    "jax>=0.6.0,<0.7",
+    "jaxopt>=0.8.5,<0.9",
 ]
 
 [build-system]
@@ -35,7 +37,7 @@ pi0_lerobot = { path = ".", editable = true }
 lerobot = { git = "https://github.com/huggingface/lerobot", rev = "8548a87bd49c19bcda64cf0d6f205a378c1cebc3", extras = [
     "pusht",
 ] }
-simplecv = { git = "https://github.com/pablovela5620/simplecv.git", rev = "b2d52451ec5702f54ca6bcbf59ae39dccb189e8a" }
+simplecv = { git = "https://github.com/pablovela5620/simplecv.git", rev = "83ffa2f9e5b493c05a9dd0ffb2e31f28ed431fe9" }
 mini-dust3r = { git = "https://github.com/pablovela5620/mini-dust3r.git", rev = "e122eab71d66f5b89cdef6e70c5ff71dcf8b34b6" }
 rtmlib = { git = "https://github.com/pablovela5620/rtmlib.git" }
 torch = { version = ">=2.5.1", index = "https://download.pytorch.org/whl/cu124" }
