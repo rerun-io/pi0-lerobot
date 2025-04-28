@@ -1,5 +1,3 @@
-from typing import Literal
-
 import jax.numpy as jnp
 from einops import rearrange, repeat
 from jax import jit
@@ -56,8 +54,6 @@ left_joints: Float[Array, "21 3"] = jnp.array(
         [-0.0022312, -0.0180950, 0.09091450],
     ]
 )
-
-joints_template_meters: Float[Array, "2 21 3"] = jnp.stack([left_joints, right_joints], axis=0)
 
 
 def quat2mat(wxyz_quat: Float[Array, "_ 4"]) -> Float[Array, "_ 3 3"]:
@@ -173,16 +169,26 @@ def with_zeros(tensor: Float[Array, "batch 3 4"]) -> Float[Array, "batch 4 4"]:
 
 
 class JointsOnly:
+    """
+    A class to compute joint positions based on pose coefficients, translation, and optional scaling.
+
+    Args:
+        template_joints: A JAX array of shape (21, 3) representing the template joint positions.
+                         This parameter replaces the old 'side' argument and determines the initial
+                         joint configuration (e.g., for left or right hand).
+    """
+
     def __init__(
         self,
-        side: Literal["left", "right"] = "right",
+        template_joints: Float[Array, "21 3"],
     ) -> None:
-        self.joints = joints_template_meters[0 if side == "left" else 1]
+        self.joints: Float[Array, "21 3"] = template_joints
 
     def __call__(
         self,
         pose_coeffs: Float[Array, "batch 48"],
         trans: Float[Array, "batch 1 3"],
+        scale: Float[Array, "batch 1"] | None = None,
     ) -> Float[Array, "batch 21 3"]:
         r"""Produces Joints based on the pose/translation."""
         batch_size: int = pose_coeffs.shape[0]
@@ -205,7 +211,10 @@ class JointsOnly:
         # This is just provided and not regressed in joints only
         # ------------------------------------------------------------------
         # convert to batched version (b, 21, 3)
+        # multiply by scale if provided, if not just use 1
         j: Float[Array, "b n_joints=21 dim=3"] = jnp.tile(self.joints, (batch_size, 1, 1))
+        if scale is not None:
+            j = j * scale.reshape(batch_size, 1, 1)
 
         # ------------------------------------------------------------------
         # Step 4 – Forward kinematics: build SE(3) for each joint
@@ -288,7 +297,7 @@ class JointsOnly:
         return jtr
 
 
-mano_j_right = JointsOnly(side="right")
-mano_j_left = JointsOnly(side="left")
+mano_j_right = JointsOnly(template_joints=right_joints)
+mano_j_left = JointsOnly(template_joints=left_joints)
 mano_j_right = jit(mano_j_right)
 mano_j_left = jit(mano_j_left)
