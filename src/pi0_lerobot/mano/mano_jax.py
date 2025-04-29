@@ -55,6 +55,10 @@ left_joints: Float[Array, "21 3"] = jnp.array(
     ]
 )
 
+# convert joints between mediapipe and mano format
+mp_to_mano: list[int] = [0, 5, 6, 7, 9, 10, 11, 17, 18, 19, 13, 14, 15, 1, 2, 3, 8, 12, 20, 16, 4]
+mano_to_mp: list[int] = [0, 13, 14, 15, 20, 1, 2, 3, 16, 4, 5, 6, 17, 10, 11, 12, 19, 7, 8, 9, 18]
+
 
 def quat2mat(wxyz_quat: Float[Array, "_ 4"]) -> Float[Array, "_ 3 3"]:
     """Converts a batch of quaternions to rotation matrices.
@@ -291,8 +295,8 @@ class JointsOnly:
         results_global: Float[Array, "b n_joints=21 4 4"] = results
 
         jtr: Float[Array, "b n_joints=21 3"] = results_global[:, :, :3, 3]
-        # Reorder joints to match visualization utilities, w, t, i, m, r, l
-        jtr = jtr[:, [0, 13, 14, 15, 20, 1, 2, 3, 16, 4, 5, 6, 17, 10, 11, 12, 19, 7, 8, 9, 18]]
+        # Reorder joints to match visualization utilities, w, t, i, m, r, l (convert mano to mediapipe)
+        jtr = jtr[:, mano_to_mp]
         jtr = jtr + trans
         return jtr
 

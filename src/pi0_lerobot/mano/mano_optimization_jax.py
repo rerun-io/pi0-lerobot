@@ -1,9 +1,11 @@
+import enum
 from dataclasses import dataclass
 from typing import Literal, TypedDict
 
 import jax
 import jax.numpy as npj
 import numpy as np
+from einops import rearrange
 from jax import jit
 from jaxopt import LevenbergMarquardt
 from jaxopt._src.levenberg_marquardt import LevenbergMarquardtState
@@ -29,6 +31,33 @@ class LossWeights(TypedDict):
     keypoint_2d: float
     depth: float
     temp: float
+
+
+@jit
+def proj_3d_vectorized(
+    xyz_hom: Float[Array, "n_frames n_joints 4"], P: Float[Array, "n_views 3 4"]
+) -> Float[Array, "n_frames n_views n_joints 2"]:
+    """
+    Projects 3D points to 2D using the projection matrix for a batch of frames and views.
+
+    xyz_hom: [n_frames, 21, 4] [x, y, z, 1]
+    P: [n_views, 3, 4] (projection matrix - includes extrensic (R, t) and intrinsic (K))
+
+    return kp2d: [n_frames, n_views, n_joints, 2] (squeeze out if 1)
+    """
+    # rearrange for batch matrix multiplication
+    xyz_hom: Float[Array, "n_frames 1 4 21"] = rearrange(
+        xyz_hom, "n_frames n_joints xyz_hom -> n_frames 1 xyz_hom n_joints"
+    )
+    P: Float[Array, "1 n_views 3 4"] = rearrange(P, "n_views n m -> 1 n_views n m")
+
+    # [1 n_views, 3, 4] @ [n_frames, 1, 4, 21] -> [n_frames, n_views, 3, 21]
+    uv_hom: Float[Array, "n_frames n_views 3 21"] = P @ xyz_hom
+    uv_hom = rearrange(uv_hom, "n_frames n_views xyz_hom n_joints -> n_frames n_views n_joints xyz_hom")
+    # convert back from homogeneous coordinates
+    uv: Float[Array, "n_frames n_views 21 2"] = uv_hom[..., :2] / uv_hom[..., 2:]
+
+    return uv
 
 
 @jit
@@ -112,7 +141,144 @@ class LMOptimJointOnly:
         Pall: Float[ndarray, "batch 3 4"],
         loss_weights: LossWeights,
         num_iters: int = 30,
-        optimize_scale_factor: bool = False,
+    ) -> None:
+        """
+        Pall - n, 3, 4 projection matrix
+        loss_weights - dictionary containing how much value to give each portion
+            of the cost function (2d, 3d, temporal)
+        num_iters - how many iterations to optimize
+        """
+
+        batch_size: int = Pall.shape[0]
+
+        self.num_iters: int = num_iters
+        # Projection Matrix (n, 3, 4) where n is the number of cameras
+        self.Pall: Float[ndarray, "batch 3 4"] = Pall
+
+        self.loss_weights: LossWeights = loss_weights
+        # use previous values to initialize, there should only ever be 1
+        # hand model per frame
+        self.so3_left_prev: Float[Array, "48"] = npj.zeros(48)  # noqa: UP037
+        self.trans_left_prev: Float[Array, "3"] = npj.array([0.2, 0, 1.5])  # noqa: UP037
+
+        self.so3_right_prev: Float[Array, "48"] = npj.zeros(48)  # noqa: UP037
+        self.trans_right_prev: Float[Array, "3"] = npj.array([-0.2, 0, 1.5])  # noqa: UP037
+
+        # remnant from mano, not needed
+        self.beta: Float[Array, "1 10"] = npj.zeros((1, 10))
+
+        # remove the need for two different optimizers, solvers ‘cholesky’, ‘inv’
+        self.optimizer = LevenbergMarquardt(
+            residual_fun=mv_residual, maxiter=self.num_iters, solver="cholesky", jit=True, xtol=1e-6, gtol=1e-6
+        )
+        # add jit
+        print("Tracing JIT, can take a while...")
+        init_params: Float[Array, "51"] = npj.concatenate([self.so3_left_prev, self.trans_left_prev])
+        _, _ = self.optimizer.run(
+            init_params,
+            cameras=npj.array(Pall),
+            xyz_pred=npj.zeros((batch_size, 21, 3)),
+            loss_weights=self.loss_weights,
+            is_left=True,
+        )
+        self.optimizer = jit(self.optimizer.run)
+
+        print("Trace Done")
+
+    def __call__(
+        self,
+        xyz_pred_batch: Float[ndarray, "b 21 3"] | None = None,
+    ) -> tuple[OptimizationResults, LevenbergMarquardtState]:
+        """
+        pose_predictions_dict
+            pose_predictions
+            camera_dict
+        """
+        so3_optimized: Float[ndarray, "2 48"] = np.zeros((2, 48))
+        trans_optimized: Float[ndarray, "2 3"] = np.zeros((2, 3))
+        xyz_mano: Float[ndarray, "2 21 3"] = np.zeros((2, 21, 3))
+        for hand_type in self.HAND_TYPE:
+            # get previous values, and extract pose_predictions
+            match hand_type:
+                case "left":
+                    xyz_pred: Float[ndarray, "21 3"] = xyz_pred_batch[0]
+                    so3_prev: Float[Array, "48"] = self.so3_left_prev.copy()
+                    trans_prev: Float[Array, "3"] = self.trans_left_prev.copy()
+
+                case "right":
+                    xyz_pred: Float[ndarray, "21 3"] = xyz_pred_batch[1]
+                    so3_prev: Float[Array, "48"] = self.so3_right_prev.copy()
+                    trans_prev: Float[Array, "3"] = self.trans_right_prev.copy()
+
+            # TODO initialize only rotation from wrist form either 3d procustus or mano preds
+            so3_init: Float[Array, "48"] = so3_prev
+            trans_init: Float[Array, "3"] = trans_prev
+
+            cam_param_list: Float[Array, "batch 3 4"] = npj.array(self.Pall)
+            init_params: Float[Array, "51"] = npj.concatenate([so3_init, trans_init])
+            params, state = self.optimizer(
+                init_params,
+                cameras=cam_param_list,
+                xyz_pred=xyz_pred[npj.newaxis, ...],
+                loss_weights=self.loss_weights,
+                is_left=hand_type == "left",
+            )
+
+            if np.isnan(params).any():
+                continue
+
+            so3: Float[Array, "48"] = params[:48]
+            trans: Float[Array, "3"] = params[48:]
+
+            so3_optimized[0 if hand_type == "left" else 1] = np.array(so3)
+            trans_optimized[0 if hand_type == "left" else 1] = np.array(trans)
+
+            # pass optimized values to mano to extract 3d joints
+            match hand_type:
+                case "left":
+                    self.so3_left_prev = so3
+                    self.trans_left_prev = trans
+
+                    xyz_mano_left: Float[Array, "1 21 3"] = mano_j_left(
+                        so3[npj.newaxis, ...], trans[npj.newaxis, npj.newaxis, ...]
+                    )
+                    xyz_mano[0] = np.array(xyz_mano_left[0])
+
+                case "right":
+                    self.so3_right_prev = so3
+                    self.trans_right_prev = trans
+
+                    xyz_mano_right: Float[Array, "1 21 3"] = mano_j_right(
+                        so3[npj.newaxis, ...], trans[npj.newaxis, npj.newaxis, ...]
+                    )
+                    xyz_mano[1] = np.array(xyz_mano_right[0])
+
+        optimization_results = OptimizationResults(
+            xyz_mano=xyz_mano,
+            so3=so3_optimized,
+            trans=trans_optimized,
+            betas=np.concatenate([self.beta, self.beta], axis=0),
+        )
+
+        return optimization_results, state
+
+
+class HandSide(enum.IntEnum):
+    """Represents the side of the hand."""
+
+    LEFT = 0
+    RIGHT = 1
+
+
+class JointAndScaleOptimization:
+    HAND_TYPE: Literal["left", "right"] = ["left", "right"]
+
+    def __init__(
+        self,
+        xyz_template: Float[ndarray, "2 21 3"],
+        Pall: Float[ndarray, "batch 3 4"],
+        loss_weights: LossWeights,
+        num_iters: int = 30,
     ) -> None:
         """
         Pall - n, 3, 4 projection matrix
