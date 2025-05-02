@@ -73,6 +73,34 @@ To run 2D pose estimation, tracking, and triangulation
 ```bash
 pixi run pose-estimation-assembly101
 ```
+hand_idx
+
+### Kinematic Hand Skeleton
+
+<p align="center">
+  <img src="media/hand-joint-only.gif" alt="Motion Retargeting Overview" width="640" />
+</p>
+
+The goal is to create a pipeline that converts time-synced multi-camera footage into axis-angle joint angles (θ) and metric 3D positions for every finger joint. This provides "motion fuel" for robotic retargeting and learning fine motor skills.
+
+**Why use a kinematic skeleton with joint angles?**
+
+- **Rig-agnostic Pose:** Captures relative bone rotations, allowing transfer to any avatar or robot hand.
+- **Easy Retargeting:** A single Forward Kinematics (FK) pass transfers motion.
+- **Compact Storage:** Requires only ~60 floats per frame.
+- **Built-in Constraints:** Easily enforce bone lengths, joint limits, etc.
+- **Gradient-Friendly:** Differentiable FK enables optimization from 2D errors.
+- **Sensor Fusion-Ready:** Integrates well with IMUs, mocap markers, etc.
+
+**Capture-to-Angles Pipeline:**
+
+1.  **Input:** Time-synced, calibrated RGB frames.
+2.  **2D Keypoints:** Detect pixel joint locations using a 2D keypoint detector.
+3.  **3D Joints:** Triangulate or use PnP with camera parameters to get metric 3D joint positions.
+4.  **Inverse Kinematics (IK):** Convert 3D joints into axis-angle joint parameters (θ).
+5.  **Forward Kinematics (FK) Check:** Rebuild 3D joints from θ for validation.
+6.  **Output:** Serialize axis-angle θ and metric 3D joint positions (xyz).
+
 ### Jupyter Notebook Tutorials
 ```bash
 pixi run notebook_tutorial
@@ -83,6 +111,7 @@ pixi run notebook_tutorial
 - [x] Basic Triangulation from 2D Detection (body pose)
 - [x] Basic Triangulation from 2D detection (hand pose)
 - [x] Detection by Tracking (extrapolate 3d views-> Generate bounding box based on extrapolated -> check based on kpts confidence)
+- [x] Joint only fitting for hand skeleton
 - [ ] Mano + SMPL fitting for skeleton kinematics
 - [ ] Add EgoCentric (first person) headset views and poses
 
