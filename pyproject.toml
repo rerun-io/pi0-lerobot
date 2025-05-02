@@ -13,6 +13,7 @@ dependencies = [
     "lovely-tensors>=0.1.18,<0.2",
     "jax>=0.6.0,<0.7",
     "jaxopt>=0.8.5,<0.9",
+    # "rerun-sdk==0.22.1",
 ]
 
 [build-system]
@@ -37,21 +38,19 @@ pi0_lerobot = { path = ".", editable = true }
 lerobot = { git = "https://github.com/huggingface/lerobot", rev = "8548a87bd49c19bcda64cf0d6f205a378c1cebc3", extras = [
     "pusht",
 ] }
-simplecv = { git = "https://github.com/pablovela5620/simplecv.git", rev = "83ffa2f9e5b493c05a9dd0ffb2e31f28ed431fe9" }
-mini-dust3r = { git = "https://github.com/pablovela5620/mini-dust3r.git", rev = "e122eab71d66f5b89cdef6e70c5ff71dcf8b34b6" }
+simplecv = { git = "https://github.com/pablovela5620/simplecv.git", rev = "0446594fd8ead3c8fa9f46b983b0a93a920e5258" }
+# mini-dust3r = { git = "https://github.com/pablovela5620/mini-dust3r.git", rev = "e122eab71d66f5b89cdef6e70c5ff71dcf8b34b6" }
 rtmlib = { git = "https://github.com/pablovela5620/rtmlib.git" }
 torch = { version = ">=2.5.1", index = "https://download.pytorch.org/whl/cu124" }
 torchvision = { version = ">=0.20.1", index = "https://download.pytorch.org/whl/cu124" }
 torchcodec = { version = ">=0.2.1", index = "https://download.pytorch.org/whl/cu124" }
 # manopth = { git = "https://github.com/gobanana520/manopth.git" }
-vggt = { git = "https://github.com/facebookresearch/vggt.git", rev = "f8bf73ac25d5089cca2d6540a185697087fa2255" }
-
-# gradio-rerun = { url = "https://huggingface.co/datasets/pablovela5620/gradio-rr-wheels/resolve/main/gradio_rerun-0.0.11-py3-none-any.whl" }
+# vggt = { git = "https://github.com/facebookresearch/vggt.git", rev = "f8bf73ac25d5089cca2d6540a185697087fa2255" }
 
 [tool.pixi.dependencies]
 python = "==3.11"
-rerun-sdk = ">=0.22.1"
-numpy = "<2"
+rerun-sdk = "==0.23.1"
+numpy = ">=2.0.0"
 pytest = ">=8.3.4,<9"
 icecream = ">=2.1.4,<3"
 jupyterlab = ">=4.3.5,<5"

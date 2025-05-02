@@ -2,12 +2,12 @@ from dataclasses import dataclass, field
 from typing import Literal
 
 import numpy as np
+from einops import rearrange
 from icecream import ic
 from jaxtyping import Float, Float32, Float64, Int
 from numpy import ndarray
 from rtmlib import YOLOX, RTMPose
 from simplecv.ops.triangulate import batch_triangulate, projectN3
-from einops import rearrange
 
 from pi0_lerobot.custom_types import BgrImageType
 

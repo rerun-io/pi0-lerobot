@@ -10,7 +10,7 @@ from jaxtyping import Float32, Float64, Int, UInt8
 from numpy import ndarray
 from simplecv.apis.view_exoego_data import log_exo_ego_sequence_batch
 from simplecv.camera_parameters import PinholeParameters
-from simplecv.data.exoego.assembly_101 import Assembely101Sequence
+from simplecv.data.exoego.assembly_101 import Assembly101Sequence
 from simplecv.data.exoego.base_exo_ego import BaseExoEgoSequence
 from simplecv.data.exoego.hocap import HOCapSequence, SubjectIDs
 from simplecv.ops.triangulate import projectN3
@@ -58,7 +58,7 @@ def run_person_detection(config: VisualzeConfig):
                 load_labels=True,
             )
         case "assembly101":
-            sequence: Assembely101Sequence = Assembely101Sequence(
+            sequence: Assembly101Sequence = Assembly101Sequence(
                 data_path=config.root_directory,
                 sequence_name=config.sequence_name,
                 subject_id=None,
