@@ -73,7 +73,7 @@ To run 2D pose estimation, tracking, and triangulation
 ```bash
 pixi run pose-estimation-assembly101
 ```
-hand_idx
+
 
 ### Kinematic Hand Skeleton
 
