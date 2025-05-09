@@ -13,6 +13,7 @@ from simplecv.camera_parameters import PinholeParameters
 from simplecv.data.exoego.assembly_101 import Assembly101Sequence
 from simplecv.data.exoego.base_exo_ego import BaseExoEgoSequence
 from simplecv.data.exoego.hocap import HOCapSequence, SubjectIDs
+from simplecv.data.exoego.multicam import MulticamSequence
 from simplecv.ops.triangulate import projectN3
 from simplecv.rerun_log_utils import RerunTyroConfig, log_pinhole, log_video
 from simplecv.video_io import MultiVideoReader
@@ -26,14 +27,33 @@ from pi0_lerobot.multiview_pose_estimator import (
 )
 from pi0_lerobot.rerun_log_utils import create_blueprint, set_pose_annotation_context
 from pi0_lerobot.skeletons.coco_17 import COCO_17_IDS
+from pi0_lerobot.skeletons.coco_133 import COCO_133_ID2NAME, COCO_133_IDS, COCO_133_LINKS
 
 np.set_printoptions(suppress=True)
+
+
+def new_annotation_context():
+    rr.log(
+        "/",
+        rr.AnnotationContext(
+            [
+                rr.ClassDescription(
+                    info=rr.AnnotationInfo(id=2, label="Wholebody 133", color=(0, 255, 0)),
+                    keypoint_annotations=[
+                        rr.AnnotationInfo(id=id, label=name) for id, name in COCO_133_ID2NAME.items()
+                    ],
+                    keypoint_connections=COCO_133_LINKS,
+                ),
+            ]
+        ),
+        static=True,
+    )
 
 
 @dataclass
 class VisualzeConfig:
     rr_config: RerunTyroConfig
-    dataset: Literal["hocap", "assembly101"] = "hocap"
+    dataset: Literal["hocap", "assembly101", "multicam"] = "hocap"
     root_directory: Path = Path("data/hocap/sample")
     subject_id: SubjectIDs | None = "8"
     sequence_name: str = "20231024_180733"
@@ -48,6 +68,7 @@ def run_person_detection(config: VisualzeConfig):
     parent_log_path: Path = Path("world")
     timeline: str = "video_time"
 
+    load_labels: bool = False
     # load data
     match config.dataset:
         case "hocap":
@@ -55,16 +76,24 @@ def run_person_detection(config: VisualzeConfig):
                 data_path=config.root_directory,
                 sequence_name=config.sequence_name,
                 subject_id=config.subject_id,
-                load_labels=True,
+                load_labels=load_labels,
             )
         case "assembly101":
             sequence: Assembly101Sequence = Assembly101Sequence(
                 data_path=config.root_directory,
                 sequence_name=config.sequence_name,
                 subject_id=None,
-                load_labels=True,
+                load_labels=load_labels,
             )
-    set_pose_annotation_context(sequence=sequence)
+        case "multicam":
+            sequence: MulticamSequence = MulticamSequence(
+                data_path=config.root_directory,
+                sequence_name=config.sequence_name,
+                subject_id=None,
+                load_labels=load_labels,
+            )
+    # set_pose_annotation_context(sequence=sequence)
+    new_annotation_context()
     rr.log("/", sequence.world_coordinate_system, static=True)
 
     exo_video_readers: MultiVideoReader = sequence.exo_video_readers
@@ -78,10 +107,20 @@ def run_person_detection(config: VisualzeConfig):
     blueprint: rrb.Blueprint = create_blueprint(exo_video_log_paths, num_videos_to_log=config.num_videos_to_log)
     rr.send_blueprint(blueprint)
 
+    match config.dataset:
+        case "hocap":
+            image_plane_distance = 0.1
+        case "assembly101":
+            image_plane_distance = 100.0
+        case "multicam":
+            image_plane_distance = 25.0
+        case _:
+            # Default or error case, though Literal type hint should prevent this
+            raise ValueError(f"Unexpected dataset value: {config.dataset}")
+
     # log pinhole parameters
     for exo_cam in sequence.exo_cam_list:
         cam_log_path: Path = parent_log_path / exo_cam.name
-        image_plane_distance: float = 0.1 if config.dataset == "hocap" else 100.0
         log_pinhole(
             camera=exo_cam,
             cam_log_path=cam_log_path,
@@ -113,13 +152,14 @@ def run_person_detection(config: VisualzeConfig):
 
     print(f"Time taken to load data: {timer() - start_time:.2f} seconds")
 
-    log_exo_ego_sequence_batch(
-        sequence=sequence,
-        shortest_timestamp=shortest_timestamp,
-        parent_log_path=parent_log_path,
-        timeline=timeline,
-        log_depth=False,
-    )
+    if load_labels:
+        log_exo_ego_sequence_batch(
+            sequence=sequence,
+            shortest_timestamp=shortest_timestamp,
+            parent_log_path=parent_log_path,
+            timeline=timeline,
+            log_depth=False,
+        )
 
     if config.dataset == "hocap":
         cams_for_detection_idx: list[int] = [1, 3, 5, 6]
@@ -136,24 +176,33 @@ def run_person_detection(config: VisualzeConfig):
     # filter gpu decoders to only include the cameras we want to detect on
     exo_gpu_decoders: list[VideoDecoder] = [exo_gpu_decoders[i] for i in cams_for_detection_idx]
     filtered_exo_pinhole_list: list[PinholeParameters] = [sequence.exo_cam_list[i] for i in cams_for_detection_idx]
+    exo_video_files: list[Path] = [exo_video_readers.video_paths[i] for i in cams_for_detection_idx]
+    exo_video_readers: MultiVideoReader = MultiVideoReader(video_paths=exo_video_files)
 
     min_num_frames: int = min([decoder.metadata.num_frames for decoder in exo_gpu_decoders])
 
-    upper_body_filter_idx = np.array([5, 6, 7, 8, 9, 10, 11, 12])
+    # 11/12 are the hips
+    upper_body_filter_idx = np.array([5, 6, 7, 8, 9, 10])  # , 11, 12])
+    wb_upper_body_filter_idx = np.arange(23, 133)
+    wb_upper_body_filter_idx = np.concatenate([upper_body_filter_idx, wb_upper_body_filter_idx])
     # Create a boolean mask for all rows
     top_half_mask = np.isin(np.arange(17), upper_body_filter_idx)
+    top_half_mask = np.isin(np.arange(133), wb_upper_body_filter_idx)
 
     pose_tracker = MultiviewBodyTracker(
-        mode="lightweight",
+        mode="wholebody",
         backend="onnxruntime",
         device="cuda",
-        filter_body_idxes=upper_body_filter_idx,
+        filter_body_idxes=wb_upper_body_filter_idx,
         cams_for_detection_idx=cams_for_detection_idx,
+        perform_tracking=False,
     )
 
     for ts_idx, timestamp in enumerate(tqdm(shortest_timestamp[:min_num_frames])):
         rr.set_time_nanos(timeline="video_time", nanos=timestamp)
-        bgr_list: list[UInt8[ndarray, "H W 3"]] = [decoder[ts_idx].cpu().numpy() for decoder in exo_gpu_decoders]
+        # this breaks with HDR videos
+        # bgr_list: list[UInt8[ndarray, "H W 3"]] = [decoder[ts_idx].cpu().numpy() for decoder in exo_gpu_decoders]
+        bgr_list: list[UInt8[ndarray, "H W 3"]] = exo_video_readers[ts_idx]
         mv_output: MVOutput = pose_tracker(bgr_list, Pall)
         for cam_idx, (exo_pinhole, (xyxy, uv, uv_scores)) in enumerate(
             zip(filtered_exo_pinhole_list, mv_output, strict=True)
@@ -182,7 +231,7 @@ def run_person_detection(config: VisualzeConfig):
                     positions=vis_uv,
                     confidences=vis_scores_uv,
                     class_ids=3,
-                    keypoint_ids=COCO_17_IDS,
+                    keypoint_ids=COCO_133_IDS,
                     show_labels=False,
                 ),
             )
@@ -205,8 +254,8 @@ def run_person_detection(config: VisualzeConfig):
                     CustomPoints2D(
                         positions=mv_output.uvc_extrap[cam_idx][:, :2],
                         confidences=mv_output.uvc_extrap[cam_idx][:, 2],
-                        class_ids=4,
-                        keypoint_ids=COCO_17_IDS,
+                        class_ids=2,
+                        keypoint_ids=COCO_133_IDS,
                         show_labels=False,
                     ),
                 )
@@ -222,8 +271,8 @@ def run_person_detection(config: VisualzeConfig):
             CustomPoints3D(
                 positions=vis_xyz,
                 confidences=vis_scores_3d,
-                class_ids=3,
-                keypoint_ids=COCO_17_IDS,
+                class_ids=2,
+                keypoint_ids=COCO_133_IDS,
                 show_labels=False,
             ),
         )
@@ -245,7 +294,7 @@ def run_person_detection(config: VisualzeConfig):
                     positions=vis_kpts_proj_2d,
                     confidences=vis_scores_proj_2d,
                     class_ids=2,
-                    keypoint_ids=COCO_17_IDS,
+                    keypoint_ids=COCO_133_IDS,
                     show_labels=False,
                 ),
             )
@@ -267,7 +316,7 @@ def run_person_detection(config: VisualzeConfig):
                         rr.Points3D(
                             positions=kpts3d[:, :3],
                             class_ids=class_id,
-                            keypoint_ids=COCO_17_IDS,
+                            keypoint_ids=COCO_133_IDS,
                             show_labels=False,
                         ),
                     )

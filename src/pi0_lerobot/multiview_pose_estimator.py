@@ -115,6 +115,12 @@ class MultiviewBodyTracker:
             "pose": "https://download.openmmlab.com/mmpose/v1/projects/rtmposev1/onnx_sdk/rtmpose-m_simcc-body7_pt-body7_420e-256x192-e48f03d0_20230504.zip",  # noqa
             "pose_input_size": (192, 256),
         },
+        "wholebody": {
+            "det": "https://download.openmmlab.com/mmpose/v1/projects/rtmposev1/onnx_sdk/yolox_m_8xb8-300e_humanart-c2c7a14a.zip",  # noqa
+            "det_input_size": (640, 640),
+            "pose": "https://download.openmmlab.com/mmpose/v1/projects/rtmw/onnx_sdk/rtmw-dw-x-l_simcc-cocktail14_270e-256x192_20231122.zip",  # noqa
+            "pose_input_size": (192, 256),
+        },
     }
 
     def __init__(
@@ -123,16 +129,18 @@ class MultiviewBodyTracker:
         det_input_size: tuple = (640, 640),
         pose: str = None,
         pose_input_size: tuple = (288, 384),
-        mode: Literal["lightweight", "balanced", "performance"] = "balanced",
+        mode: Literal["lightweight", "balanced", "performance", "wholebody"] = "balanced",
         backend: str = "onnxruntime",
         device: str = "cpu",
         keypoint_threshold: float = 0.3,
         cams_for_detection_idx: list[int] | None = None,
         filter_body_idxes: Int[ndarray, "idx"] | None = None,
+        perform_tracking: bool = True,
     ) -> None:
         self.keypoint_threshold = keypoint_threshold
         self.filter_body_idxes = filter_body_idxes
         self.cams_for_detection_idx = cams_for_detection_idx
+        self.perform_tracking = perform_tracking
         if pose is None:
             pose = self.MODE[mode]["pose"]
             pose_input_size = self.MODE[mode]["pose_input_size"]
@@ -174,7 +182,7 @@ class MultiviewBodyTracker:
         # the 3d keypoints which we can project to 2d and use for detection              #
         ##################################################################################
         xyzc_extrap = None
-        if self.xyzc_t1 is not None and self.xyzc_t2 is not None:
+        if (self.xyzc_t1 is not None and self.xyzc_t2 is not None) and self.perform_tracking:
             xyzc_extrap: Float32[ndarray, "n_kpts 4"] = self.extrapolate_3d_keypoints(
                 xyzc_t1=self.xyzc_t1, xyzc_t2=self.xyzc_t2
             )

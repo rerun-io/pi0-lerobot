@@ -35,10 +35,10 @@ scripts = [".pixi.sh"]
 pi0_lerobot = { path = ".", editable = true }
 # openpi = { git = "https://github.com/Physical-Intelligence/openpi.git", rev = "f543cb1d87ada91645b1484ca5dab6ac3749be8d" }
 # openpi-client = { git = "https://github.com/Physical-Intelligence/openpi.git", subdirectory = "packages/openpi-client" }
-lerobot = { git = "https://github.com/huggingface/lerobot", rev = "8548a87bd49c19bcda64cf0d6f205a378c1cebc3", extras = [
-    "pusht",
-] }
-simplecv = { git = "https://github.com/pablovela5620/simplecv.git", rev = "0446594fd8ead3c8fa9f46b983b0a93a920e5258" }
+# lerobot = { git = "https://github.com/huggingface/lerobot", rev = "8548a87bd49c19bcda64cf0d6f205a378c1cebc3", extras = [
+#     "pusht",
+# ] }
+simplecv = { git = "https://github.com/pablovela5620/simplecv.git", branch = "ego-exo-multicam" }
 # mini-dust3r = { git = "https://github.com/pablovela5620/mini-dust3r.git", rev = "e122eab71d66f5b89cdef6e70c5ff71dcf8b34b6" }
 rtmlib = { git = "https://github.com/pablovela5620/rtmlib.git" }
 torch = { version = ">=2.5.1", index = "https://download.pytorch.org/whl/cu124" }
