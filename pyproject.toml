@@ -13,7 +13,7 @@ dependencies = [
     "lovely-tensors>=0.1.18,<0.2",
     "jax>=0.6.0,<0.7",
     "jaxopt>=0.8.5,<0.9",
-    # "rerun-sdk==0.22.1",
+    "huggingface-hub[cli]>=0.31.2,<0.32",
 ]
 
 [build-system]
@@ -51,7 +51,7 @@ torchcodec = { version = ">=0.2.1", index = "https://download.pytorch.org/whl/cu
 python = "==3.11"
 rerun-sdk = "==0.23.1"
 numpy = ">=2.0.0"
-pytest = ">=8.3.4,<9"
+pytest = ">=8.3.5,<9"
 icecream = ">=2.1.4,<3"
 jupyterlab = ">=4.3.5,<5"
 orjson = ">=3.10.15,<4"
@@ -62,11 +62,23 @@ cudnn = ">=9.8.0.87,<10"
 py-opencv = ">=4.10.0,<5"
 mmengine = ">=0.10.7,<0.11"
 open3d = ">=0.18.0,<0.19"
+hf-transfer = ">=0.1.9,<0.2"
 
 
 [tool.pixi.tasks]
 notebook_tutorial = { cmd = "jupyter lab notebooks", description = "Starts jupyter lab with notebooks for lerobot tutorials" }
 _install-chumpy = { cmd = "pip install git+https://github.com/gobanana520/chumpy.git", description = "Installs chumpy" }
+
+[tool.pixi.tasks._download-multicam-sample]
+cmd = """
+test -e data/multicam-sample \
+  || (huggingface-cli download pablovela5620/multicam-sample \
+    --repo-type dataset \
+    --include "multicam-sample/**" \
+    --local-dir data/)
+"""
+outputs = ["data/multicam-sample"]
+description = "Downloads an example multicam dataset from huggingface"
 
 [tool.pixi.tasks._download-assembly101-sample]
 cmd = """
@@ -102,7 +114,7 @@ cmd = """
     )
     """
 outputs = ["data/hocap/sample.zip", "data/hocap/sample"]
-# depends-on = ["_install-chumpy"]
+depends-on = ["_download-assembly101-sample"]
 description = "Downloads and extracts an example polycam dataset from huggingface, this may take a while"
 
 [tool.pixi.tasks.visualize-hocap-dataset]
@@ -128,7 +140,7 @@ description = "Runs 2d pose estimation and triangulation on body for assembly101
 cmd = """
 python tools/person_3d_detection.py
 """
-depends-on = ["_download-hocap-sample"]
+depends-on = ["_download-hocap-sample", "_download-multicam-sample"]
 description = "Runs 2d pose estimation and triangulation on body for hocap dataset"
 
 [tool.pixi.tasks.calibrate-cameras-vggt]

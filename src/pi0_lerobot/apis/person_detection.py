@@ -58,6 +58,7 @@ class VisualzeConfig:
     subject_id: SubjectIDs | None = "8"
     sequence_name: str = "20231024_180733"
     num_videos_to_log: Literal[4, 8] = 8
+    log_labels: bool = True
     log_depths: bool = False
     log_extrapolated_keypoints: bool = False
     send_as_batch: bool = True
@@ -68,7 +69,7 @@ def run_person_detection(config: VisualzeConfig):
     parent_log_path: Path = Path("world")
     timeline: str = "video_time"
 
-    load_labels: bool = False
+    load_labels: bool = config.log_labels
     # load data
     match config.dataset:
         case "hocap":
@@ -86,6 +87,9 @@ def run_person_detection(config: VisualzeConfig):
                 load_labels=load_labels,
             )
         case "multicam":
+            # multicam does not have labels, raise error if load_labels is True
+            if load_labels:
+                raise ValueError("Multicam dataset does not have labels.")
             sequence: MulticamSequence = MulticamSequence(
                 data_path=config.root_directory,
                 sequence_name=config.sequence_name,
@@ -195,7 +199,7 @@ def run_person_detection(config: VisualzeConfig):
         device="cuda",
         filter_body_idxes=wb_upper_body_filter_idx,
         cams_for_detection_idx=cams_for_detection_idx,
-        perform_tracking=False,
+        perform_tracking=True,
     )
 
     for ts_idx, timestamp in enumerate(tqdm(shortest_timestamp[:min_num_frames])):

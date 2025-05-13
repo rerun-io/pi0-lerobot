@@ -19,7 +19,16 @@
             "request": "launch",
             "program": "${workspaceFolder}/tools/person_3d_detection.py",
             "console": "integratedTerminal",
-            "args": [] // Add any arguments here if needed
+            "args": [
+                "--dataset",
+                "multicam",
+                "--root-directory",
+                "../../personal/simplecv/data/multicam/",
+                "--subject-id",
+                "None",
+                "--sequence-name",
+                "card-shuffle1"
+            ]
         },
     ]
 }
