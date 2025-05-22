@@ -101,6 +101,20 @@ The goal is to create a pipeline that converts time-synced multi-camera footage 
 5.  **Forward Kinematics (FK) Check:** Rebuild 3D joints from θ for validation.
 6.  **Output:** Serialize axis-angle θ and metric 3D joint positions (xyz).
 
+
+### Data Capture
+<p align="center">
+  <img src="media/final-arflow-optimized-final.gif" alt="Data Capture ARFlow" width="640" />
+</p>
+
+Use a grpc server to collect sensor data with an arkit/arcore capable device via ARFlow.
+Download Phone code [here](https://github.com/cake-lab/ARFlow/releases/tag/v0.3.0) and install on device
+then run arflow server
+
+```bash
+pixi shell
+python tools/arflow-test.py
+```
 ### Jupyter Notebook Tutorials
 ```bash
 pixi run notebook_tutorial

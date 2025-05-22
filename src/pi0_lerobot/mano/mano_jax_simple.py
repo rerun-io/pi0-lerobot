@@ -208,7 +208,7 @@ class ManoJaxLayer:
         # ------------------------------------------------------------------
         # Step 6 – Forward kinematics: build SE(3) for each joint
         # ------------------------------------------------------------------
-
+        # get the root joint of each batch
         root_j: Float[Array, "b dim=3 1"] = joints[:, 0, :].reshape(batch_size, 3, 1)
         # trans here refers to transformation matrix
         root_trans: Float[Array, "b 4 4"] = with_zeros(jnp.concatenate([root_rot, root_j], 2))

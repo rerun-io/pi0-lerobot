@@ -3,15 +3,83 @@ from typing import Literal
 
 import numpy as np
 import torch
-from einops import rearrange
-from jaxtyping import Float32, Int64
+from einops import rearrange, repeat
+from jax import numpy as jnp
+from jaxtyping import Array, Float32, Int32, Int64
 from torch import Tensor
 from torch.nn import Module
 
+from pi0_lerobot.mano.mano_jax_simple import ManoJaxLayer
 from pi0_lerobot.mano.mano_pytorch_simple import ManoSimpleLayer
 
 
-class MANOLayer(Module):
+class MANOLayerJax:
+    """Wrapper layer for manopth ManoLayer."""
+
+    def __init__(self, side: Literal["left", "right"], betas: Float32[np.ndarray, "10"], mano_root_dir: Path) -> None:
+        """
+        Constructor for MANOLayer.
+
+        Args:
+            side (str): MANO hand type. 'right' or 'left'.
+            betas (np.ndarray): A numpy array of shape [10] containing the betas.
+            mano_root_dir (Path): Path to the MANO root directory
+        """
+        super().__init__()
+        assert mano_root_dir.exists(), f"MANO root directory {mano_root_dir} not found."
+        assert mano_root_dir.is_dir(), f"{mano_root_dir} is not a directory."
+
+        self._side: Literal["left", "right"] = side
+        self._betas: Float32[np.ndarray, "10"] = betas  # noqa: UP037
+
+        self._mano_layer = ManoJaxLayer(
+            side=side,
+            mano_root=mano_root_dir,
+            ncomps=45,
+            use_pca=True,
+        )
+
+        # betas (prescanned for particular subject hand)
+        self.b: Float32[Array, "1 10"] = jnp.array(rearrange(betas, "b -> 1 b"))
+        self.f: Int32[Array, "num_faces=1538 3"] = self._mano_layer.faces
+
+    def forward(
+        self, p: Float32[Array, "b n_poses=48"], t: Float32[Array, "b dim=3"]
+    ) -> tuple[Float32[Array, "b n_verts=778 dim=3"], Float32[Array, "b n_joints=21 dim=3"]]:
+        """
+        Forward function.
+
+        Args:
+            p (Tensor): A tensor of shape [B, 48] containing the pose.
+            t (Tensor): A tensor of shape [B, 3] containing the translation.
+
+        Returns:
+            tuple[Tensor, Tensor]:
+                v: A tensor of shape [B, 778, 3] containing the vertices.
+                j: A tensor of shape [B, 21, 3] containing the joints.
+        """
+        batch_size: int = p.shape[0]
+        mano_output: tuple[Float32[Array, "b n_verts=778 dim=3"], Float32[Array, "b n_joints=21 dim=3"]] = (
+            self._mano_layer.forward(p, repeat(self.b, "1 beta -> batch beta", batch=batch_size), t)
+        )
+
+        # Convert to meters.
+        verts: Float32[Array, "b n_verts=778 dim=3"] = mano_output[0] / 1000.0
+        joints: Float32[Array, "b n_joints=21 dim=3"] = mano_output[1] / 1000.0
+        return verts, joints
+
+    @property
+    def side(self) -> str:
+        """Return the side of the hand."""
+        return self._side
+
+    @property
+    def num_verts(self) -> int:
+        """Return the number of vertices."""
+        return 778
+
+
+class MANOLayerTorch(Module):
     """Wrapper layer for manopth ManoLayer."""
 
     def __init__(self, side: Literal["left", "right"], betas: Float32[np.ndarray, "10"], mano_root_dir: Path) -> None:

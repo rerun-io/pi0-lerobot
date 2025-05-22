@@ -1,16 +1,17 @@
 from pathlib import Path
 from typing import Literal
 
+import numpy as np
 import rerun as rr
 import rerun.blueprint as rrb
-import torch
 from einops import rearrange
-from jaxtyping import Float32, Int
+from jax import numpy as jnp
+from jaxtyping import Array, Float32, Int
 from numpy import ndarray
 from simplecv.data.exoego.base_exo_ego import BaseExoEgoSequence
 from tqdm import tqdm
 
-from pi0_lerobot.mano.mano_utils import MANOLayer
+from pi0_lerobot.mano.mano_utils import MANOLayerJax
 from pi0_lerobot.skeletons.coco_17 import COCO_ID2NAME, COCO_LINKS
 
 
@@ -128,12 +129,12 @@ def log_mano_batch(
     timeline: str,
     mano_root_dir: Path,
 ) -> None:
-    mano_poses: Float32[torch.Tensor, "num_frames 2 51"] = torch.from_numpy(sequence.exo_batch_data.mano_stack.poses)
+    mano_poses: Float32[Array, "num_frames 2 51"] = jnp.array(sequence.exo_batch_data.mano_stack.poses)
 
     # order is important here
     hand_sides: list[str] = ["right", "left"]
-    mano_layers: list[MANOLayer] = [
-        MANOLayer(
+    mano_layers: list[MANOLayerJax] = [
+        MANOLayerJax(
             side=side,
             betas=sequence.exo_batch_data.mano_stack.betas,
             mano_root_dir=mano_root_dir,
@@ -154,14 +155,16 @@ def log_mano_batch(
     )
 
     for hand_idx, (hand_side, mano_layer) in pbar:
-        poses: Float32[torch.Tensor, "num_frames 48"] = mano_poses[:, hand_idx, :48]
-        translations: Float32[torch.Tensor, "num_frames 3"] = mano_poses[:, hand_idx, 48:51]
+        poses: Float32[Array, "num_frames 48"] = mano_poses[:, hand_idx, :48]
+        translations: Float32[Array, "num_frames 3"] = mano_poses[:, hand_idx, 48:51]
         mano_outputs: tuple[
-            Float32[torch.Tensor, "num_frames 778 3"],
-            Float32[torch.Tensor, "num_frames 21 3"],
-        ] = mano_layer(poses, translations)
-        verts: Float32[torch.Tensor, "num_frames 778 3"] = mano_outputs[0]
-        joints: Float32[torch.Tensor, "num_frames 21 3"] = mano_outputs[1]
+            Float32[Array, "num_frames 778 3"],
+            Float32[Array, "num_frames 21 3"],
+        ] = mano_layer.forward(poses, translations)
+        verts: Float32[Array, "num_frames 778 3"] = mano_outputs[0]
+        joints: Float32[Array, "num_frames 21 3"] = mano_outputs[1]
+
+        triangle_indices_np = np.array(mano_layer.f)
 
         rr.log(
             f"mano_{mano_layer.side}",
@@ -178,7 +181,7 @@ def log_mano_batch(
             columns=[
                 *rr.Points3D.columns(
                     positions=rearrange(
-                        verts,
+                        np.array(verts),
                         "num_frames kpts dim -> (num_frames kpts) dim",
                     ),
                 ).partition(lengths=[778] * len(sequence)),

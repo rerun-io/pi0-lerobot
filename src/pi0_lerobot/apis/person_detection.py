@@ -6,6 +6,7 @@ from typing import Literal
 import numpy as np
 import rerun as rr
 import rerun.blueprint as rrb
+from jaxopt._src.levenberg_marquardt import LevenbergMarquardtState
 from jaxtyping import Float32, Float64, Int, UInt8
 from numpy import ndarray
 from simplecv.apis.view_exoego_data import log_exo_ego_sequence_batch
@@ -21,24 +22,50 @@ from torchcodec.decoders import VideoDecoder
 from tqdm import tqdm
 
 from pi0_lerobot.custom_types import CustomPoints2D, CustomPoints3D
+from pi0_lerobot.mano.kinematic_hand_optim_jax import (
+    JointAndScaleOptimization,
+    LossWeights,
+    OptimizationResults,
+    proj_3d_vectorized,
+)
 from pi0_lerobot.multiview_pose_estimator import (
     MultiviewBodyTracker,
     MVOutput,
 )
-from pi0_lerobot.rerun_log_utils import create_blueprint, set_pose_annotation_context
-from pi0_lerobot.skeletons.coco_17 import COCO_17_IDS
+from pi0_lerobot.rerun_log_utils import create_blueprint
 from pi0_lerobot.skeletons.coco_133 import COCO_133_ID2NAME, COCO_133_IDS, COCO_133_LINKS
 
 np.set_printoptions(suppress=True)
 
 
-def new_annotation_context():
+def new_annotation_context(sequence: BaseExoEgoSequence) -> None:
     rr.log(
         "/",
         rr.AnnotationContext(
             [
                 rr.ClassDescription(
+                    info=rr.AnnotationInfo(id=0, label="Right Hand", color=(0, 0, 255)),
+                    keypoint_annotations=[
+                        rr.AnnotationInfo(id=id, label=name) for id, name in sequence.hand_id2name.items()
+                    ],
+                    keypoint_connections=sequence.hand_links,
+                ),
+                rr.ClassDescription(
+                    info=rr.AnnotationInfo(id=1, label="Left Hand", color=(255, 0, 0)),
+                    keypoint_annotations=[
+                        rr.AnnotationInfo(id=id, label=name) for id, name in sequence.hand_id2name.items()
+                    ],
+                    keypoint_connections=sequence.hand_links,
+                ),
+                rr.ClassDescription(
                     info=rr.AnnotationInfo(id=2, label="Wholebody 133", color=(0, 255, 0)),
+                    keypoint_annotations=[
+                        rr.AnnotationInfo(id=id, label=name) for id, name in COCO_133_ID2NAME.items()
+                    ],
+                    keypoint_connections=COCO_133_LINKS,
+                ),
+                rr.ClassDescription(
+                    info=rr.AnnotationInfo(id=3, label="Projected Wholebody 133", color=(0, 0, 255)),
                     keypoint_annotations=[
                         rr.AnnotationInfo(id=id, label=name) for id, name in COCO_133_ID2NAME.items()
                     ],
@@ -97,7 +124,7 @@ def run_person_detection(config: VisualzeConfig):
                 load_labels=load_labels,
             )
     # set_pose_annotation_context(sequence=sequence)
-    new_annotation_context()
+    new_annotation_context(sequence)
     rr.log("/", sequence.world_coordinate_system, static=True)
 
     exo_video_readers: MultiVideoReader = sequence.exo_video_readers
@@ -187,8 +214,11 @@ def run_person_detection(config: VisualzeConfig):
 
     # 11/12 are the hips
     upper_body_filter_idx = np.array([5, 6, 7, 8, 9, 10])  # , 11, 12])
-    wb_upper_body_filter_idx = np.arange(23, 133)
-    wb_upper_body_filter_idx = np.concatenate([upper_body_filter_idx, wb_upper_body_filter_idx])
+    face_idx = np.arange(23, 91)
+    left_hand_idx = np.arange(91, 112)
+    right_hand_idx = np.arange(112, 133)
+    wb_upper_body_filter_idx = np.concatenate([upper_body_filter_idx, face_idx, left_hand_idx, right_hand_idx])
+
     # Create a boolean mask for all rows
     top_half_mask = np.isin(np.arange(17), upper_body_filter_idx)
     top_half_mask = np.isin(np.arange(133), wb_upper_body_filter_idx)
@@ -202,12 +232,21 @@ def run_person_detection(config: VisualzeConfig):
         perform_tracking=True,
     )
 
+    # kinematic hand skeleton and optimization
+    loss_weights = LossWeights(
+        keypoint_2d=0.01,
+        depth=0.0,
+        temp=0.0,
+    )
+
     for ts_idx, timestamp in enumerate(tqdm(shortest_timestamp[:min_num_frames])):
         rr.set_time_nanos(timeline="video_time", nanos=timestamp)
         # this breaks with HDR videos
         # bgr_list: list[UInt8[ndarray, "H W 3"]] = [decoder[ts_idx].cpu().numpy() for decoder in exo_gpu_decoders]
         bgr_list: list[UInt8[ndarray, "H W 3"]] = exo_video_readers[ts_idx]
         mv_output: MVOutput = pose_tracker(bgr_list, Pall)
+
+        # log 2d keypoint outputs
         for cam_idx, (exo_pinhole, (xyxy, uv, uv_scores)) in enumerate(
             zip(filtered_exo_pinhole_list, mv_output, strict=True)
         ):
@@ -220,6 +259,8 @@ def run_person_detection(config: VisualzeConfig):
             # filter to only include the desired keypoints
             vis_uv[~top_half_mask, :] = np.nan
             vis_scores_uv[~top_half_mask] = np.nan
+            # filter out keypoints that are below the threshold (0.75)
+            vis_uv[vis_scores_uv < 0.75, :] = np.nan
 
             rr.log(
                 f"{cam_log_path / 'bboxes'}",
@@ -234,7 +275,7 @@ def run_person_detection(config: VisualzeConfig):
                 CustomPoints2D(
                     positions=vis_uv,
                     confidences=vis_scores_uv,
-                    class_ids=3,
+                    class_ids=2,
                     keypoint_ids=COCO_133_IDS,
                     show_labels=False,
                 ),
@@ -258,12 +299,23 @@ def run_person_detection(config: VisualzeConfig):
                     CustomPoints2D(
                         positions=mv_output.uvc_extrap[cam_idx][:, :2],
                         confidences=mv_output.uvc_extrap[cam_idx][:, 2],
-                        class_ids=2,
+                        class_ids=0,
                         keypoint_ids=COCO_133_IDS,
                         show_labels=False,
                     ),
                 )
 
+        # check if this is the first frame
+        if ts_idx == 0:
+            # initialize the optimizer
+            xyz_template_left: Float32[ndarray, "num_kpts 3"] = mv_output.xyz[91:112, :3].copy()
+            xyz_template_right: Float32[ndarray, "num_kpts 3"] = mv_output.xyz[112:133, :3].copy()
+            new_joint_and_scale_optimizer = JointAndScaleOptimization(
+                xyz_template=np.stack([xyz_template_left, xyz_template_right], axis=0),
+                Pall=Pall,
+                loss_weights=loss_weights,
+                num_iters=30,
+            )
         vis_xyz: Float32[ndarray, "num_kpts 3"] = mv_output.xyz.copy()
         vis_scores_3d: Float32[ndarray, "num_kpts"] = mv_output.scores_3d.copy()  # noqa: UP037
         # filter to only include the desired keypoints
@@ -285,6 +337,47 @@ def run_person_detection(config: VisualzeConfig):
         xyzc = np.concatenate([mv_output.xyz, scores_expanded], axis=-1)
 
         mv_uvc_projected: Float32[ndarray, "n_views n_kpts 3"] = projectN3(xyzc, Pall).astype(np.float32)
+        # uv_projected_left: Float32[ndarray, "n_views 21 2"] = mv_uvc_projected[:, 91:112, 0:2].copy()
+        # uv_projected_right: Float32[ndarray, "n_views 21 2"] = mv_uvc_projected[:, 112:133, 0:2].copy()
+
+        uv_projected_left: Float32[ndarray, "n_views 21 2"] = np.stack(mv_output.uv, axis=0)[:, 91:112]
+        uv_projected_right: Float32[ndarray, "n_views 21 2"] = np.stack(mv_output.uv, axis=0)[:, 112:133]
+
+        uv_scores_left: Float32[ndarray, "n_views 21"] = np.stack(mv_output.scores_2d, axis=0)[:, 91:112]
+        uv_scores_right: Float32[ndarray, "n_views 21"] = np.stack(mv_output.scores_2d, axis=0)[:, 112:133]
+        # filter based on scores over threshold
+        uv_projected_left[uv_scores_left < 0.75, :] = np.nan
+        uv_projected_right[uv_scores_right < 0.75, :] = np.nan
+
+        optim_out: tuple[OptimizationResults, LevenbergMarquardtState] = new_joint_and_scale_optimizer(
+            uv_left_pred_batch=uv_projected_left, uv_right_pred_batch=uv_projected_right
+        )
+        optimized_result: OptimizationResults = optim_out[0]
+
+        xyz_optim_left: Float64[ndarray, "21 3"] = optimized_result.xyz_mano[0]
+        xyz_optim_right: Float64[ndarray, "21 3"] = optimized_result.xyz_mano[1]
+
+        rr.log(
+            "xyz-optim_left",
+            rr.Points3D(
+                positions=xyz_optim_left,
+                class_ids=0,
+                keypoint_ids=sequence.hand_ids,
+                show_labels=False,
+            ),
+        )
+
+        rr.log(
+            "xyz-optim_right",
+            rr.Points3D(
+                positions=xyz_optim_right,
+                class_ids=1,
+                keypoint_ids=sequence.hand_ids,
+                show_labels=False,
+            ),
+        )
+
+        # get the left and right hand keypoints from projection
         for all_exo_pinhole, uvc_projected in zip(sequence.exo_cam_list, mv_uvc_projected, strict=True):
             proj_log_path: Path = parent_log_path / all_exo_pinhole.name / "pinhole" / "video"
             vis_kpts_proj_2d: ndarray = uvc_projected[:, :2].copy()
@@ -297,7 +390,7 @@ def run_person_detection(config: VisualzeConfig):
                 CustomPoints2D(
                     positions=vis_kpts_proj_2d,
                     confidences=vis_scores_proj_2d,
-                    class_ids=2,
+                    class_ids=3,
                     keypoint_ids=COCO_133_IDS,
                     show_labels=False,
                 ),
@@ -308,9 +401,8 @@ def run_person_detection(config: VisualzeConfig):
             mv_output.xyz_t1,
             mv_output.xyz_t2,
         ]
-        class_ids = [4, 5, 6]
         names = ["extrap", "t1", "t2"]
-        for kpts3d, class_id, name in zip(kpts3d_list, class_ids, names, strict=True):
+        for kpts3d, name in zip(kpts3d_list, names, strict=True):
             if kpts3d is not None:
                 # this has to happen and I don't know why
                 kpts3d[~top_half_mask, :] = np.nan
@@ -319,7 +411,7 @@ def run_person_detection(config: VisualzeConfig):
                         f"{name}",
                         rr.Points3D(
                             positions=kpts3d[:, :3],
-                            class_ids=class_id,
+                            class_ids=2,
                             keypoint_ids=COCO_133_IDS,
                             show_labels=False,
                         ),
