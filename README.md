@@ -104,7 +104,7 @@ The goal is to create a pipeline that converts time-synced multi-camera footage 
 
 ### Data Capture
 <p align="center">
-  <img src="media/final-arflow-optimized-final.gif" alt="Data Capture ARFlow" width="640" />
+  <img src="media/final-arflow.gif" alt="Data Capture ARFlow" width="640" />
 </p>
 
 Use a grpc server to collect sensor data with an arkit/arcore capable device via ARFlow.
