@@ -102,6 +102,18 @@ The goal is to create a pipeline that converts time-synced multi-camera footage 
 6.  **Output:** Serialize axis-angle θ and metric 3D joint positions (xyz).
 
 
+### WILOR-Nano Example
+
+<p align="center">
+  <img src="media/wilor-nano-readme.gif" alt="wilor-nano example" width="640" />
+</p>
+
+Run WILOR-Nano on a sample Assembly101 video and stream to Rerun:
+```bash
+pixi run wilor-example
+```
+
+
 ### Data Capture
 <p align="center">
   <img src="media/final-arflow.gif" alt="Data Capture ARFlow" width="640" />

@@ -13,7 +13,7 @@ dependencies = [
     "lovely-tensors>=0.1.18,<0.2",
     "jax>=0.6.0,<0.7",
     "jaxopt>=0.8.5,<0.9",
-    "huggingface-hub[cli]>=0.31.2,<0.32",
+    "huggingface-hub[cli]>=0.31.2",
 ]
 
 [build-system]
@@ -38,28 +38,53 @@ pi0_lerobot = { path = ".", editable = true }
 # lerobot = { git = "https://github.com/huggingface/lerobot", rev = "8548a87bd49c19bcda64cf0d6f205a378c1cebc3", extras = [
 #     "pusht",
 # ] }
-simplecv = { git = "https://github.com/pablovela5620/simplecv.git", rev = "ae1363dacd3c2f2f2e07a48b0479ea8bc9a13c29" }
+simplecv = { git = "https://github.com/pablovela5620/simplecv.git", tag = "v0.5.1" }
 # mini-dust3r = { git = "https://github.com/pablovela5620/mini-dust3r.git", rev = "e122eab71d66f5b89cdef6e70c5ff71dcf8b34b6" }
 rtmlib = { git = "https://github.com/pablovela5620/rtmlib.git" }
-torch = { version = ">=2.5.1", index = "https://download.pytorch.org/whl/cu124" }
-torchvision = { version = ">=0.20.1", index = "https://download.pytorch.org/whl/cu124" }
-torchcodec = { version = ">=0.2.1", index = "https://download.pytorch.org/whl/cu124" }
-arflow = { git = "https://github.com/pablovela5620/ARFlow.git", branch = "rr-0.23.1", subdirectory = "python" }
+torch = { version = ">=2.5.1", index = "https://download.pytorch.org/whl/cu128" }
+torchvision = { version = ">=0.20.1", index = "https://download.pytorch.org/whl/cu128" }
+torchcodec = { version = ">=0.2.1", index = "https://download.pytorch.org/whl/cu128" }
+wilor-nano = { git = "https://github.com/pablovela5620/wilor-nano.git", rev = "797a7dc4206eb56340f2487abd3b446622c70977" }
+# arflow = { git = "https://github.com/pablovela5620/ARFlow.git", branch = "rr-0.23.1", subdirectory = "python" }
 # manopth = { git = "https://github.com/gobanana520/manopth.git" }
 # vggt = { git = "https://github.com/facebookresearch/vggt.git", rev = "f8bf73ac25d5089cca2d6540a185697087fa2255" }
 
 [tool.pixi.dependencies]
-python = "==3.11"
-rerun-sdk = "==0.23.1"
+
+# CUDA Build Tools
+cuda-compiler = "*"
+cuda-version = "12.8.*"
+cuda-cudart-dev = "*"
+cuda-crt = "*"
+libcusparse-dev = "*"
+cuda-driver-dev = "*"
+cuda-nvcc = "*"
+cuda-nvrtc-dev = "*"
+cuda-nvtx = "*"
+cuda-nvtx-dev = "*"
+cuda-nvml-dev = "*"
+cuda-profiler-api = "*"
+
+# CUDA Libraries
+cudnn = "*"
+libcublas-dev = "*"
+libcudss-dev = "*"
+libcufile-dev = "*"
+libcufft-dev = "*"
+libcurand-dev = "*"
+libcusolver-dev = "*"
+cusparselt = "*"
+libnvjitlink = "*"
+# cuda126 end
+
+python = "==3.12"
+rerun-sdk = ">=0.23.1"
 numpy = ">=2.0.0"
 pytest = ">=8.3.5,<9"
 icecream = ">=2.1.4,<3"
 jupyterlab = ">=4.3.5,<5"
 orjson = ">=3.10.15,<4"
 pip = ">=25.0.1,<26"
-cuda = "12.4.*"
-cuda-nvcc = "12.4.*"
-cudnn = ">=9.8.0.87,<10"
 py-opencv = ">=4.10.0,<5"
 mmengine = ">=0.10.7,<0.11"
 open3d = ">=0.18.0,<0.19"
@@ -67,6 +92,7 @@ hf-transfer = ">=0.1.9,<0.2"
 grpcio = ">=1.62.2,<2"
 grpcio-tools = ">=1.62.2,<2"
 h5py = ">=3.13.0,<4"
+dill = ">=0.4.0,<0.5"
 
 
 [tool.pixi.tasks]
@@ -165,6 +191,15 @@ python tools/calibrate_camera.py \
 """
 depends-on = ["_download-hocap-sample"]
 description = "Calibrates camera using vggt method instead of using builtin calibration"
+
+
+[tool.pixi.tasks.wilor-example]
+cmd = """
+python tools/wilor_inference.py \
+    --video-path data/assembly101-sample/videos/av1/nusar-2021_action_both_9012-c07c_9012_user_id_2021-02-01_164345/HMC_84355350_mono10bit-av1.mp4
+"""
+depends-on = ["_download-assembly101-sample"]
+description = "Runs WILOR-Nano inference on a sample Assembly101 video and streams to Rerun"
 
 
 [tool.ruff]
